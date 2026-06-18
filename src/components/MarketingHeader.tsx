@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { Logo } from "@/components/Logo";
 import { cn } from "@/lib/utils";
 
@@ -56,7 +55,6 @@ export function MarketingHeader({ ctaHref = "/register", ctaLabel = "Get Started
         </nav>
 
         <div className="flex items-center gap-2">
-          <ThemeToggle />
           <Link
             href="/login"
             className="btn-secondary hidden !rounded-xl !px-4 !py-2 text-sm sm:inline-flex"

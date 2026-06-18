@@ -30,7 +30,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { Logo } from "@/components/Logo";
 
 const navSections = [
@@ -100,7 +99,7 @@ export function Sidebar() {
           <Menu className="h-5 w-5" />
         </button>
         <Logo size="md" />
-        <ThemeToggle />
+        <div className="h-9 w-9" aria-hidden />
       </div>
 
       {open && (

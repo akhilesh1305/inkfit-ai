@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { ClientSwitcher } from "@/components/clients/ClientSwitcher";
 
 interface SessionUser {
@@ -46,7 +45,6 @@ export function DashboardTopBar() {
         </div>
       )}
       <div className="ml-auto flex items-center gap-2">
-        <ThemeToggle />
         <button type="button" onClick={logout} className="btn-ghost text-sm" title="Sign out">
           <LogOut className="h-4 w-4" />
           Sign out

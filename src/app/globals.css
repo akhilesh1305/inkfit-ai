@@ -16,16 +16,6 @@
     --ink-accent: 6 182 212;
   }
 
-  .light {
-    --surface: 255 255 255;
-    --surface-raised: 250 250 250;
-    --surface-muted: 244 244 245;
-    --content: 10 10 10;
-    --content-muted: 82 82 91;
-    --content-subtle: 113 113 122;
-    --line: 228 228 231;
-  }
-
   html {
     scroll-behavior: smooth;
   }
@@ -372,35 +362,4 @@
   .btn-primary:hover:not(:disabled) {
     transform: none;
   }
-}
-
-/* Light mode overrides */
-.light body {
-  @apply bg-zinc-50 text-zinc-900;
-}
-
-.light .card {
-  background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(0, 0, 0, 0.08);
-}
-
-.light .btn-secondary {
-  background: rgba(255, 255, 255, 0.8);
-  border-color: rgba(0, 0, 0, 0.1);
-  @apply text-zinc-900;
-}
-
-.light .input-field {
-  background: #fff;
-  border-color: rgba(0, 0, 0, 0.1);
-  @apply text-zinc-900;
-}
-
-.light .nav-link:hover {
-  @apply bg-zinc-100;
-}
-
-.light .section-alt {
-  background: rgba(244, 244, 245, 0.8);
-  border-color: rgba(0, 0, 0, 0.06);
 }
