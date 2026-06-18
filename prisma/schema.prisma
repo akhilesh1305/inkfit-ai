@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model BrandKit {
+  id              String   @id @default(cuid())
+  companyName     String
+  primaryColor    String   @default("#4f46e5")
+  secondaryColor  String   @default("#6366f1")
+  accentColor     String   @default("#818cf8")
+  targetAudience  String
+  writingStyle    String
+  tone            String   @default("Professional")
+  industry        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model CalendarEvent {
+  id        String   @id @default(cuid())
+  title     String
+  type      String
+  date      String
+  status    String   @default("draft")
+  platform  String?
+  content   String?
+  createdAt DateTime @default(now())
+}
+
+model Usage {
+  id           String   @id @default(cuid())
+  month        String   @unique
+  generations  Int      @default(0)
+  plan         String   @default("free")
+}
+
+model PlatformConnection {
+  id        String   @id @default(cuid())
+  platform  String   @unique
+  connected Boolean  @default(false)
+  account   String?
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  plan      String   @default("free")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TeamWorkspace {
+  id           String   @id @default(cuid())
+  name         String   @default("InkFit Workspace")
+  allowInvites Boolean  @default(true)
+  defaultRole  String   @default("editor")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model TeamMember {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  role        String   @default("editor")
+  status      String   @default("invited")
+  avatarColor String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AgencyClient {
+  id              String   @id @default(cuid())
+  name            String
+  industry        String
+  website         String?
+  brandColor      String   @default("#7C3AED")
+  contentCreated  Int      @default(0)
+  projects        Int      @default(0)
+  brandVoiceReady Boolean  @default(false)
+  calendarItems   Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  planId               String    @default("free")
+  status               String    @default("active")
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  currentPeriodEnd     DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+}
+
+model Invoice {
+  id              String   @id @default(cuid())
+  userId          String
+  stripeInvoiceId String?
+  amount          Int
+  currency        String   @default("INR")
+  status          String   @default("paid")
+  description     String?
+  pdfUrl          String?
+  periodLabel     String
+  createdAt       DateTime @default(now())
+}
