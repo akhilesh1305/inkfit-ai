@@ -8,6 +8,7 @@ import {
   Share2,
   Image,
   Search,
+  ScanLine,
   Calendar,
   CreditCard,
   Menu,
@@ -27,6 +28,10 @@ import {
   Globe,
   UserCircle,
   Bot,
+  FolderKanban,
+  Target,
+  LayoutTemplate,
+  UsersRound,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -39,6 +44,9 @@ const navSections = [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
       { href: "/dashboard/agent", label: "Content Agent", icon: Bot },
+      { href: "/dashboard/workspace", label: "Workspace", icon: FolderKanban },
+      { href: "/dashboard/templates", label: "Templates", icon: LayoutTemplate },
+      { href: "/dashboard/projects", label: "Campaigns", icon: Target },
     ],
   },
   {
@@ -50,13 +58,14 @@ const navSections = [
       { href: "/dashboard/social", label: "Social Posts", icon: Share2 },
       { href: "/dashboard/repurpose", label: "Content Repurposer", icon: Repeat2 },
       { href: "/dashboard/website-generator", label: "Website Generator", icon: Globe },
-      { href: "/dashboard/images", label: "Images", icon: Image },
+      { href: "/dashboard/images", label: "Image Studio", icon: Image },
     ],
   },
   {
     label: "Optimize",
     items: [
       { href: "/dashboard/seo", label: "SEO Writer", icon: Search },
+      { href: "/dashboard/analyzer", label: "Content Analyzer", icon: ScanLine },
       { href: "/dashboard/marketing-strategy", label: "Marketing Strategist", icon: Briefcase },
       { href: "/dashboard/competitors", label: "Competitor Intel", icon: BarChart3 },
     ],
@@ -71,7 +80,8 @@ const navSections = [
       { href: "/dashboard/team", label: "Team", icon: Users },
       { href: "/dashboard/clients", label: "Clients", icon: Building2 },
       { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
-      { href: "/dashboard/publish", label: "Publishing", icon: Send },
+      { href: "/dashboard/referrals", label: "Referrals", icon: UsersRound },
+      { href: "/dashboard/publish", label: "Publishing Center", icon: Send },
     ],
   },
 ];

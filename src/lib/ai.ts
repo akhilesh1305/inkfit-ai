@@ -2,12 +2,12 @@ import { format, addDays } from "date-fns";
 import type { BrandKit } from "./brand";
 import { brandContext } from "./brand";
 
-function hasOpenAIKey(): boolean {
+export function hasOpenAIKey(): boolean {
   const key = process.env.OPENAI_API_KEY;
   return !!key && key !== "sk-your-key-here" && key.startsWith("sk-");
 }
 
-function hasGeminiKey(): boolean {
+export function hasGeminiKey(): boolean {
   const key = process.env.GEMINI_API_KEY;
   return !!key && key.length > 10;
 }
@@ -48,7 +48,7 @@ async function callGemini(prompt: string): Promise<string> {
   return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 }
 
-async function generate(system: string, user: string, maxTokens = 2000): Promise<string> {
+export async function generate(system: string, user: string, maxTokens = 2000): Promise<string> {
   if (hasOpenAIKey()) return callOpenAI(system, user, maxTokens);
   if (hasGeminiKey()) return callGemini(`${system}\n\n${user}`);
   return "";
@@ -338,15 +338,37 @@ export async function suggestTopics(brand?: BrandKit, count = 10): Promise<strin
   ].slice(0, count);
 }
 
+import {
+  getStyleById,
+  type ImageStyleId,
+  DEMO_GALLERY,
+} from "@/lib/image-studio";
+
+const STYLE_DEMO_URLS: Record<ImageStyleId, string> = {
+  corporate: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200&q=80",
+  minimal: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1024&q=80",
+  "3d": "https://images.unsplash.com/photo-1626785774573-4b799315346d?w=1024&q=80",
+  illustration: "https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=1024&q=80",
+  "modern-saas": "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&q=80",
+  "social-media": "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1024&q=80",
+};
+
 export interface ImageRequest {
   prompt: string;
   style: string;
+  styleId?: ImageStyleId;
   size: string;
+  aspectRatio?: string;
   useCase?: string;
 }
 
-export async function generateImage(req: ImageRequest): Promise<{ url: string; prompt: string }> {
-  const fullPrompt = `${req.useCase || "marketing"} image, ${req.style} style: ${req.prompt}`;
+export async function generateImage(
+  req: ImageRequest
+): Promise<{ url: string; prompt: string; live: boolean }> {
+  const styleMeta = req.styleId ? getStyleById(req.styleId) : null;
+  const fullPrompt = styleMeta
+    ? `${req.prompt}. Style: ${styleMeta.promptSuffix}`
+    : `${req.useCase || "marketing"} image, ${req.style} style: ${req.prompt}`;
 
   if (hasOpenAIKey()) {
     const res = await fetch("https://api.openai.com/v1/images/generations", {
@@ -359,15 +381,15 @@ export async function generateImage(req: ImageRequest): Promise<{ url: string; p
     });
     if (res.ok) {
       const data = await res.json();
-      return { url: data.data[0]?.url ?? "", prompt: req.prompt };
+      return { url: data.data[0]?.url ?? "", prompt: req.prompt, live: true };
     }
   }
 
-  const dims = req.size === "1024x1024" ? "800x800" : "800x450";
-  const text = encodeURIComponent(`${req.useCase || "Creative"}`.slice(0, 30));
+  const styleId = req.styleId ?? "modern-saas";
   return {
-    url: `https://placehold.co/${dims}/4f46e5/ffffff/png?text=${text}`,
+    url: STYLE_DEMO_URLS[styleId],
     prompt: req.prompt,
+    live: false,
   };
 }
 

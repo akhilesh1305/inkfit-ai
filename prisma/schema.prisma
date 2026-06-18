@@ -115,3 +115,127 @@ model Invoice {
   periodLabel     String
   createdAt       DateTime @default(now())
 }
+
+model WorkspaceFolder {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  color     String   @default("#7C3AED")
+  createdAt DateTime @default(now())
+}
+
+model WorkspaceContent {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  type      String
+  status    String   @default("draft")
+  folderId  String?
+  tags      String   @default("[]")
+  favorite  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Campaign {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String
+  goal        String
+  status      String   @default("active")
+  dueDate     String?
+  color       String   @default("#6366f1")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CampaignItem {
+  id         String   @id @default(cuid())
+  campaignId String
+  userId     String
+  title      String
+  type       String
+  column     String   @default("ideas")
+  body       String   @default("")
+  dueDate    String?
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model ImageStudioItem {
+  id          String   @id @default(cuid())
+  userId      String
+  prompt      String
+  style       String
+  aspectRatio String
+  url         String
+  favorite    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model PublishConnection {
+  id        String   @id @default(cuid())
+  userId    String
+  platform  String
+  connected Boolean  @default(false)
+  account   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, platform])
+}
+
+model ScheduledPost {
+  id          String    @id @default(cuid())
+  userId      String
+  platform    String
+  title       String
+  content     String
+  status      String    @default("draft")
+  scheduledAt DateTime?
+  publishedAt DateTime?
+  impressions Int       @default(0)
+  engagements Int       @default(0)
+  clicks      Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model TemplateFavorite {
+  id         String   @id @default(cuid())
+  userId     String
+  templateId String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, templateId])
+}
+
+model TemplateUseCount {
+  templateId String @id
+  count      Int    @default(0)
+}
+
+model ReferralProfile {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  code          String   @unique
+  clicks        Int      @default(0)
+  signups       Int      @default(0)
+  conversions   Int      @default(0)
+  creditsEarned Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ReferralInvite {
+  id            String   @id @default(cuid())
+  referrerId    String
+  name          String
+  email         String
+  status        String   @default("clicked")
+  rewardCredits Int      @default(0)
+  createdAt     DateTime @default(now())
+}
