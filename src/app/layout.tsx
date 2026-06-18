@@ -12,14 +12,28 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   metadataBase: new URL(getSiteUrl()),
-  title: "InkFit AI | AI Content Studio for Blogs, Social & SEO",
+  title: {
+    default: "InkFit AI — AI Content Studio",
+    template: "%s | InkFit AI",
+  },
   description:
-    "Generate LinkedIn posts, blogs, images, and SEO content in minutes. Try InkFit AI free — built for founders, creators, agencies, and marketing teams.",
+    "Create LinkedIn posts, blogs, SEO pages & social content with AI. Free to start — built for founders, creators & agencies.",
   keywords: ["AI content", "LinkedIn growth", "SEO toolkit", "blog writer", "social media AI", "InkFit AI"],
+  applicationName: "InkFit AI",
   openGraph: {
-    title: "InkFit AI | AI Content Studio",
-    description: "Create content that fits your brand — powered by AI.",
+    title: "InkFit AI — AI Content Studio",
+    description:
+      "Create LinkedIn posts, blogs, SEO pages & social content with AI. Free to start.",
     type: "website",
+    siteName: "InkFit AI",
+    locale: "en_US",
+    url: getSiteUrl(),
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "InkFit AI — AI Content Studio",
+    description:
+      "Create LinkedIn posts, blogs, SEO pages & social content with AI. Free to start.",
   },
   icons: {
     icon: "/inkfit-logo.png",
