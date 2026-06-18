@@ -38,25 +38,54 @@ export function AiDemoSection() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [outputType, setOutputType] = useState<DemoOutputType | null>(null);
+  const [outputContent, setOutputContent] = useState("");
+  const [outputLabel, setOutputLabel] = useState("");
+  const [isLiveAi, setIsLiveAi] = useState(false);
   const [typing, setTyping] = useState(false);
   const [activePromptId, setActivePromptId] = useState<DemoOutputType | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const output = outputType ? DEMO_OUTPUTS[outputType] : null;
+  const output = outputType
+    ? {
+        label: outputLabel || DEMO_OUTPUTS[outputType].label,
+        icon: DEMO_OUTPUTS[outputType].icon,
+        content: outputContent,
+      }
+    : null;
   const typedText = useTypewriter(output?.content ?? "", typing);
 
-  const runGenerate = useCallback((text: string, typeOverride?: DemoOutputType) => {
+  const runGenerate = useCallback(async (text: string, typeOverride?: DemoOutputType) => {
     if (!text.trim() || loading) return;
     setLoading(true);
     setOutputType(null);
+    setOutputContent("");
     setTyping(false);
 
-    setTimeout(() => {
+    try {
+      const res = await fetch("/api/demo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: text, type: typeOverride }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Generation failed");
+
+      const type = (data.type as DemoOutputType) || typeOverride || detectOutputType(text);
+      setOutputType(type);
+      setOutputLabel(data.label);
+      setOutputContent(data.content);
+      setIsLiveAi(!!data.live);
+      setTyping(true);
+    } catch {
       const type = typeOverride ?? detectOutputType(text);
       setOutputType(type);
-      setLoading(false);
+      setOutputLabel(DEMO_OUTPUTS[type].label);
+      setOutputContent(DEMO_OUTPUTS[type].content);
+      setIsLiveAi(false);
       setTyping(true);
-    }, 1600);
+    } finally {
+      setLoading(false);
+    }
   }, [loading]);
 
   const generate = useCallback(() => {
@@ -237,7 +266,7 @@ export function AiDemoSection() {
                       </div>
                       <span className="text-sm font-semibold text-brand-400">{output.label}</span>
                       <span className="ml-auto rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-                        AI Generated
+                        {isLiveAi ? "Live AI" : "Sample"}
                       </span>
                     </div>
                     <div className="flex-1 overflow-y-auto rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 text-sm leading-relaxed text-content-muted">

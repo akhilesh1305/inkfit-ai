@@ -371,6 +371,25 @@ export async function generateImage(req: ImageRequest): Promise<{ url: string; p
   };
 }
 
+const DEMO_TYPE_INSTRUCTIONS: Record<string, string> = {
+  linkedin: "Write a LinkedIn post with hooks, short paragraphs, and hashtags.",
+  blog: "Write a blog introduction (2-3 paragraphs) with a strong hook.",
+  instagram: "Write an Instagram caption with emojis and hashtags. Keep it engaging and platform-native.",
+  seo: "Write an SEO meta title (under 60 chars) and meta description (under 160 chars).",
+  email: "Write an email subject line, preview text, and short body.",
+};
+
+export async function generateDemoContent(
+  prompt: string,
+  type: string
+): Promise<{ content: string; live: boolean }> {
+  const instruction = DEMO_TYPE_INSTRUCTIONS[type] ?? DEMO_TYPE_INSTRUCTIONS.linkedin;
+  const system = `You are InkFit AI, an expert content writer. ${instruction} Follow the user's request exactly. Output only the content — no preamble.`;
+  const live = await generate(system, prompt.trim(), 800);
+  if (live) return { content: live.trim(), live: true };
+  return { content: "", live: false };
+}
+
 export function getDemoCalendarEvents(): import("./types").CalendarEvent[] {
   const today = new Date();
   return [
