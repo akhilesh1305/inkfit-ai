@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateBlog } from "@/lib/ai";
 import { getSession } from "@/lib/auth";
+import { gateCredits } from "@/lib/credit-api";
 import { getKnowledgeContextForUser } from "@/lib/knowledge-context";
 import { prisma } from "@/lib/prisma";
 import type { BrandKit } from "@/lib/brand";
@@ -20,17 +21,11 @@ async function getBrand(): Promise<BrandKit | undefined> {
   };
 }
 
-async function trackUsage() {
-  const month = new Date().toISOString().slice(0, 7);
-  await prisma.usage.upsert({
-    where: { month },
-    create: { month, generations: 1 },
-    update: { generations: { increment: 1 } },
-  });
-}
-
 export async function POST(req: Request) {
   try {
+    const gate = await gateCredits("content_generation");
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const brand = await getBrand();
     const session = await getSession();
@@ -43,7 +38,6 @@ export async function POST(req: Request) {
       audience: body.audience || brand?.targetAudience,
       knowledgeContext,
     });
-    await trackUsage();
     return NextResponse.json({ content });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

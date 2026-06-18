@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
-import { ClientSwitcher } from "@/components/clients/ClientSwitcher";
+import { WorkspaceSwitcher } from "@/components/workspaces/WorkspaceSwitcher";
+import { CreditsTopBarWidget } from "@/components/credits/CreditsTopBarWidget";
 
 interface SessionUser {
   name: string;
@@ -32,7 +33,7 @@ export function DashboardTopBar() {
     <header className="sticky top-0 z-30 hidden h-14 items-center justify-between border-b border-white/[0.08] bg-ink-bg/80 px-8 backdrop-blur-xl lg:flex">
       {user && (
         <div className="flex items-center gap-4">
-          <ClientSwitcher />
+          <WorkspaceSwitcher />
           <div className="flex items-center gap-3">
             <div className="icon-gradient h-8 w-8 text-xs font-bold text-white">
               {user.name.charAt(0).toUpperCase()}
@@ -44,7 +45,8 @@ export function DashboardTopBar() {
           </div>
         </div>
       )}
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex items-center gap-3">
+        <CreditsTopBarWidget />
         <button type="button" onClick={logout} className="btn-ghost text-sm" title="Sign out">
           <LogOut className="h-4 w-4" />
           Sign out

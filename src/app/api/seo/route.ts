@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { optimizeSEO } from "@/lib/ai";
 import { generateSEOArticle } from "@/lib/seo-content";
+import { gateCredits } from "@/lib/credit-api";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
@@ -21,6 +22,9 @@ export async function POST(req: Request) {
       : undefined;
 
     if (body.action === "write") {
+      const gate = await gateCredits("seo_article");
+      if (!gate.ok) return gate.response;
+
       const article = generateSEOArticle({
         topic: body.topic,
         targetKeyword: body.targetKeyword,

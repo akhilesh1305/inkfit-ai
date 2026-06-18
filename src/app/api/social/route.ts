@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateSocialPosts } from "@/lib/ai";
+import { gateCredits } from "@/lib/credit-api";
 import { prisma } from "@/lib/prisma";
 import type { BrandKit } from "@/lib/brand";
 
@@ -20,6 +21,9 @@ async function getBrand(): Promise<BrandKit | undefined> {
 
 export async function POST(req: Request) {
   try {
+    const gate = await gateCredits("content_generation");
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const brand = await getBrand();
     const content = await generateSocialPosts({ ...body, brand });

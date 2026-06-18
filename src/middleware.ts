@@ -27,7 +27,9 @@ export async function middleware(req: NextRequest) {
   const isAuthed = token ? await hasValidSession(token) : false;
 
   const isAuthPage = pathname === "/login" || pathname === "/register";
-  const isProtected = pathname.startsWith("/dashboard") || pathname.startsWith("/admin");
+  const isOnboarding = pathname === "/onboarding";
+  const isProtected =
+    pathname.startsWith("/dashboard") || pathname.startsWith("/admin") || isOnboarding;
 
   if (isProtected && !isAuthed) {
     const url = req.nextUrl.clone();
@@ -46,5 +48,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/admin/:path*", "/login", "/register"],
+  matcher: ["/dashboard/:path*", "/admin/:path*", "/onboarding", "/login", "/register"],
 };

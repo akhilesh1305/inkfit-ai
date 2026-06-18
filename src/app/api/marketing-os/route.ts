@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generate, hasGeminiKey, hasOpenAIKey } from "@/lib/ai";
 import { getKnowledgeContextForUser } from "@/lib/knowledge-context";
+import { gateCredits } from "@/lib/credit-api";
 import {
   generateMarketingOS,
   getSectionMeta,
@@ -103,6 +104,9 @@ export async function POST(req: Request) {
     const body = await req.json();
 
     if (body.action === "generate") {
+      const gate = await gateCredits("marketing_plan");
+      if (!gate.ok) return gate.response;
+
       const goal = String(body.goal ?? "").trim();
       if (!goal) {
         return NextResponse.json({ error: "Goal is required" }, { status: 400 });

@@ -3,21 +3,13 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   getPlanById,
-  getGenerationLimit,
-  computeCreditsRemaining,
-  computePercentUsed,
-  DEMO_USAGE_BREAKDOWN,
   demoInvoices,
   demoBillingHistory,
   type BillingSummary,
 } from "@/lib/billing";
+import { getCreditSummaryForUser } from "@/lib/credit-service";
 import { createCheckoutSession } from "@/lib/stripe";
 import { getRequestOrigin } from "@/lib/site";
-
-function currentMonthKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
 
 async function getOrCreateSubscription(userId: string, planId: string) {
   let sub = await prisma.subscription.findUnique({ where: { userId } });
@@ -29,26 +21,22 @@ async function getOrCreateSubscription(userId: string, planId: string) {
   return sub;
 }
 
-async function getUsage(planId: string) {
-  const month = currentMonthKey();
-  let usage = await prisma.usage.findUnique({ where: { month } });
-  if (!usage) {
-    usage = await prisma.usage.create({
-      data: { month, generations: 127, plan: planId },
-    });
-  }
-  const limit = getGenerationLimit(planId);
-  const used = usage.generations;
-  const nextMonth = new Date();
-  nextMonth.setMonth(nextMonth.getMonth() + 1, 1);
+async function getUsage(userId: string, planId: string) {
+  const plan = getPlanById(planId);
+  const creditSummary = await getCreditSummaryForUser(userId, planId, plan.name);
 
   return {
-    generationsUsed: used,
-    generationsLimit: limit,
-    creditsRemaining: computeCreditsRemaining(used, limit),
-    percentUsed: computePercentUsed(used, limit),
-    breakdown: DEMO_USAGE_BREAKDOWN,
-    resetDate: nextMonth.toISOString(),
+    generationsUsed: creditSummary.creditsUsed,
+    generationsLimit: creditSummary.creditsLimit,
+    creditsRemaining: creditSummary.creditsRemaining,
+    percentUsed: creditSummary.percentUsed,
+    breakdown: creditSummary.breakdown.map((b) => ({
+      label: b.label,
+      count: b.credits,
+      color: b.color,
+    })),
+    resetDate: creditSummary.resetDate,
+    warningLevel: creditSummary.warningLevel,
   };
 }
 
@@ -62,7 +50,7 @@ export async function GET() {
     const user = await prisma.user.findUnique({ where: { id: session.id } });
     const planId = user?.plan ?? session.plan ?? "free";
     const sub = await getOrCreateSubscription(session.id, planId);
-    const usage = await getUsage(planId);
+    const usage = await getUsage(session.id, planId);
 
     const dbInvoices = await prisma.invoice.findMany({
       where: { userId: session.id },

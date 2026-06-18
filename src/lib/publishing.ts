@@ -15,6 +15,8 @@ export interface PublishConnection {
   platform: PublishPlatformId;
   connected: boolean;
   account: string | null;
+  profileName?: string | null;
+  profileImage?: string | null;
 }
 
 export interface ScheduledPost {

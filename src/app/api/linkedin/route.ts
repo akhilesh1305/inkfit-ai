@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateLinkedInCarousel, generateCommentSuggestions, generateViralIdeas } from "@/lib/ai";
+import { gateCredits } from "@/lib/credit-api";
 import { generateLinkedInPost } from "@/lib/linkedin-content";
 import type { LinkedInContentType } from "@/lib/linkedin-content";
 import { prisma } from "@/lib/prisma";
@@ -22,6 +23,9 @@ async function getBrand(): Promise<BrandKit | undefined> {
 
 export async function POST(req: Request) {
   try {
+    const gate = await gateCredits("content_generation");
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const brand = await getBrand();
     const { action } = body;

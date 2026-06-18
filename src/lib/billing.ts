@@ -13,6 +13,7 @@ export interface BillingUsage {
   percentUsed: number;
   breakdown: UsageBreakdown[];
   resetDate: string;
+  warningLevel?: "none" | "approaching" | "critical" | "depleted";
 }
 
 export interface BillingSubscription {

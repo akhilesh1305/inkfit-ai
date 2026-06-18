@@ -117,25 +117,27 @@ model Invoice {
 }
 
 model WorkspaceFolder {
-  id        String   @id @default(cuid())
-  userId    String
-  name      String
-  color     String   @default("#7C3AED")
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  userId      String
+  workspaceId String?
+  name        String
+  color       String   @default("#7C3AED")
+  createdAt   DateTime @default(now())
 }
 
 model WorkspaceContent {
-  id        String   @id @default(cuid())
-  userId    String
-  title     String
-  body      String
-  type      String
-  status    String   @default("draft")
-  folderId  String?
-  tags      String   @default("[]")
-  favorite  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  userId      String
+  workspaceId String?
+  title       String
+  body        String
+  type        String
+  status      String   @default("draft")
+  folderId    String?
+  tags        String   @default("[]")
+  favorite    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Campaign {
@@ -177,13 +179,15 @@ model ImageStudioItem {
 }
 
 model PublishConnection {
-  id        String   @id @default(cuid())
-  userId    String
-  platform  String
-  connected Boolean  @default(false)
-  account   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  userId       String
+  platform     String
+  connected    Boolean  @default(false)
+  account      String?
+  profileName  String?
+  profileImage String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([userId, platform])
 }
@@ -331,4 +335,149 @@ model ExtensionWebsite {
   updatedAt  DateTime  @updatedAt
 
   @@unique([userId, domain])
+}
+
+model OnboardingProfile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  completed      Boolean  @default(false)
+  businessName   String?
+  websiteUrl     String?
+  industry       String?
+  companySize    String?
+  audienceType   String?
+  goals          String?
+  mainChallenges String?
+  contentGoals   String?
+  brandVoice     String?
+  generatedData  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model CreditUsage {
+  id                String   @id @default(cuid())
+  userId            String
+  month             String
+  contentGeneration Int      @default(0)
+  aiImage           Int      @default(0)
+  seoArticle        Int      @default(0)
+  marketingPlan     Int      @default(0)
+  agentRequest      Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([userId, month])
+}
+
+model Workflow {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  nodes       String
+  edges       String
+  input       String    @default("{}")
+  status      String    @default("draft")
+  lastRunAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model WorkflowRun {
+  id          String    @id @default(cuid())
+  userId      String
+  workflowId  String
+  status      String    @default("running")
+  steps       String    @default("[]")
+  error       String?
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+}
+
+model ContentPerformance {
+  id          String    @id @default(cuid())
+  userId      String
+  title       String
+  contentType String
+  platform    String?
+  views       Int       @default(0)
+  engagements Int       @default(0)
+  clicks      Int       @default(0)
+  shares      Int       @default(0)
+  comments    Int       @default(0)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model PromptCollection {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  icon      String   @default("📁")
+  color     String   @default("#7C3AED")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PromptLibraryItem {
+  id           String    @id @default(cuid())
+  userId       String
+  title        String
+  body         String
+  category     String
+  tags         String    @default("[]")
+  collectionId String?
+  favorite     Boolean   @default(false)
+  useCount     Int       @default(0)
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Workspace {
+  id          String   @id @default(cuid())
+  ownerId     String
+  name        String
+  slug        String
+  type        String
+  description String?
+  icon        String   @default("🏠")
+  color       String   @default("#7C3AED")
+  clientId    String?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([ownerId, slug])
+}
+
+model WorkspaceMember {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        String   @default("editor")
+  createdAt   DateTime @default(now())
+
+  @@unique([workspaceId, userId])
+}
+
+model UserWorkspacePreference {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  activeWorkspaceId String?
+  updatedAt         DateTime @updatedAt
+}
+
+model MarketingEmployeeRun {
+  id            String   @id @default(cuid())
+  userId        String
+  goal          String
+  status        String   @default("active")
+  messages      String   @default("[]")
+  steps         String
+  currentStepId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { gateCredits } from "@/lib/credit-api";
 import { generate, hasGeminiKey, hasOpenAIKey } from "@/lib/ai";
 import { getKnowledgeContextForUser } from "@/lib/knowledge-context";
 import {
@@ -116,6 +117,9 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+
+    const gate = await gateCredits("content_generation");
+    if (!gate.ok) return gate.response;
 
     const request: VideoStudioRequest = {
       inputType,

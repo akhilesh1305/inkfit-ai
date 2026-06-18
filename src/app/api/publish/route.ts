@@ -39,7 +39,13 @@ function mapPost(row: {
 }
 
 function mapConnections(
-  rows: { platform: string; connected: boolean; account: string | null }[]
+  rows: {
+    platform: string;
+    connected: boolean;
+    account: string | null;
+    profileName?: string | null;
+    profileImage?: string | null;
+  }[]
 ): PublishConnection[] {
   return PUBLISH_PLATFORMS.map((p) => {
     const row = rows.find((r) => r.platform === p.id);
@@ -47,6 +53,8 @@ function mapConnections(
       platform: p.id,
       connected: row?.connected ?? false,
       account: row?.account ?? null,
+      profileName: row?.profileName ?? null,
+      profileImage: row?.profileImage ?? null,
     };
   });
 }
@@ -56,7 +64,14 @@ async function seedForUser(userId: string) {
   if (connCount === 0) {
     await prisma.publishConnection.createMany({
       data: [
-        { userId, platform: "linkedin", connected: true, account: "@inkfit.ai" },
+        {
+          userId,
+          platform: "linkedin",
+          connected: true,
+          account: "akhilesh-sharma",
+          profileName: "Akhilesh Sharma",
+          profileImage: "https://ui-avatars.com/api/?name=AS&background=0A66C2&color=ffffff&size=128&bold=true",
+        },
         { userId, platform: "twitter", connected: true, account: "@inkfitai" },
         { userId, platform: "facebook", connected: false, account: null },
         { userId, platform: "instagram", connected: true, account: "@inkfit.ai" },

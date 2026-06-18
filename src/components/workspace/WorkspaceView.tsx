@@ -37,6 +37,12 @@ export function WorkspaceView() {
 
   useEffect(() => {
     load();
+    const handler = () => {
+      setLoading(true);
+      load();
+    };
+    window.addEventListener("inkfit-workspace-change", handler);
+    return () => window.removeEventListener("inkfit-workspace-change", handler);
   }, [load]);
 
   const filtered = useMemo(

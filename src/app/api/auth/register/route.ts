@@ -27,6 +27,10 @@ export async function POST(req: Request) {
       },
     });
 
+    await prisma.onboardingProfile.create({
+      data: { userId: user.id, completed: false },
+    });
+
     const token = await createSessionToken({
       id: user.id,
       name: user.name,

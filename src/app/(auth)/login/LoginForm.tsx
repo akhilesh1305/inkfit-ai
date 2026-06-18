@@ -30,7 +30,13 @@ export default function LoginForm() {
         setError(data.error || "Login failed.");
         return;
       }
-      router.push(from);
+      const statusRes = await fetch("/api/onboarding");
+      const status = await statusRes.json();
+      if (!status.completed) {
+        router.push("/onboarding");
+      } else {
+        router.push(from);
+      }
       router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");

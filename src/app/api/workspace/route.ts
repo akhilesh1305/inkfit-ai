@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getActiveWorkspaceIdForUser } from "@/lib/workspace-context";
 import {
   DEMO_CONTENT,
   DEMO_FOLDERS,
@@ -55,14 +56,16 @@ function demoResponse(userId: string) {
   return { folders, items, userId };
 }
 
-async function seedForUser(userId: string) {
-  const existing = await prisma.workspaceContent.count({ where: { userId } });
+async function seedForUser(userId: string, workspaceId: string) {
+  const existing = await prisma.workspaceContent.count({
+    where: { userId, workspaceId },
+  });
   if (existing > 0) return;
 
   const folders: WorkspaceFolder[] = [];
   for (const f of DEMO_FOLDERS) {
     const created = await prisma.workspaceFolder.create({
-      data: { userId, name: f.name, color: f.color },
+      data: { userId, workspaceId, name: f.name, color: f.color },
     });
     folders.push(mapFolder(created));
   }
@@ -72,6 +75,7 @@ async function seedForUser(userId: string) {
     await prisma.workspaceContent.create({
       data: {
         userId,
+        workspaceId,
         title: item.title,
         body: item.body,
         type: item.type,
@@ -91,15 +95,20 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await seedForUser(session.id);
+    const workspaceId = await getActiveWorkspaceIdForUser(session.id);
+    if (!workspaceId) {
+      return NextResponse.json({ folders: [], items: [] });
+    }
+
+    await seedForUser(session.id, workspaceId);
 
     const [folders, items] = await Promise.all([
       prisma.workspaceFolder.findMany({
-        where: { userId: session.id },
+        where: { userId: session.id, workspaceId },
         orderBy: { name: "asc" },
       }),
       prisma.workspaceContent.findMany({
-        where: { userId: session.id },
+        where: { userId: session.id, workspaceId },
         orderBy: { updatedAt: "desc" },
       }),
     ]);
@@ -121,12 +130,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const workspaceId = await getActiveWorkspaceIdForUser(session.id);
+    if (!workspaceId) {
+      return NextResponse.json({ error: "No active workspace" }, { status: 400 });
+    }
+
     const body = await req.json();
 
     if (body.action === "create") {
       const item = await prisma.workspaceContent.create({
         data: {
           userId: session.id,
+          workspaceId,
           title: String(body.title || "Untitled").trim(),
           body: String(body.body || ""),
           type: body.type || "blog",
@@ -171,6 +186,7 @@ export async function POST(req: Request) {
       const item = await prisma.workspaceContent.create({
         data: {
           userId: session.id,
+          workspaceId,
           title: `${source.title} (Copy)`,
           body: source.body,
           type: source.type,
@@ -198,6 +214,7 @@ export async function POST(req: Request) {
       const folder = await prisma.workspaceFolder.create({
         data: {
           userId: session.id,
+          workspaceId,
           name: String(body.name || "New Folder").trim(),
           color: body.color || "#7C3AED",
         },

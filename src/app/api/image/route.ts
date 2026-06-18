@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { gateCredits } from "@/lib/credit-api";
 import { prisma } from "@/lib/prisma";
 import { generateImage } from "@/lib/ai";
 import { DEMO_GALLERY, getAspectSize, type GalleryImage, type ImageStyleId, type AspectRatioId } from "@/lib/image-studio";
@@ -79,6 +80,9 @@ export async function POST(req: Request) {
     const body = await req.json();
 
     if (body.action === "generate") {
+      const gate = await gateCredits("ai_image");
+      if (!gate.ok) return gate.response;
+
       const styleId = body.styleId as ImageStyleId;
       const aspectRatio = body.aspectRatio as AspectRatioId;
       const size = getAspectSize(aspectRatio);
