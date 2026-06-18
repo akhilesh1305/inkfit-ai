@@ -48,9 +48,18 @@ async function callGemini(prompt: string): Promise<string> {
   return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 }
 
-export async function generate(system: string, user: string, maxTokens = 2000): Promise<string> {
-  if (hasOpenAIKey()) return callOpenAI(system, user, maxTokens);
-  if (hasGeminiKey()) return callGemini(`${system}\n\n${user}`);
+export async function generate(
+  system: string,
+  user: string,
+  maxTokens = 2000,
+  knowledgeContext?: string
+): Promise<string> {
+  const systemWithKb =
+    knowledgeContext?.trim()
+      ? `${system}\n\n${knowledgeContext.trim()}`
+      : system;
+  if (hasOpenAIKey()) return callOpenAI(systemWithKb, user, maxTokens);
+  if (hasGeminiKey()) return callGemini(`${systemWithKb}\n\n${user}`);
   return "";
 }
 
@@ -61,6 +70,7 @@ export interface BlogRequest {
   keywords?: string;
   audience?: string;
   brand?: BrandKit;
+  knowledgeContext?: string;
 }
 
 export async function generateBlog(req: BlogRequest): Promise<string> {
@@ -72,7 +82,7 @@ ${req.keywords ? `Include keywords: ${req.keywords}` : ""}
 ${brand}
 Use SEO-friendly H1, H2, H3 headings. Include intro, body sections, and CTA conclusion.`;
 
-  const live = await generate("Expert SEO copywriter and content marketer.", prompt, 2500);
+  const live = await generate("Expert SEO copywriter and content marketer.", prompt, 2500, req.knowledgeContext);
   if (live) return live;
 
   const kw = req.keywords?.split(",").map((k) => k.trim()).filter(Boolean) ?? [];

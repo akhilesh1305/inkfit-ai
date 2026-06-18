@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRAND } from "@/lib/brand";
 import { analyzeContent, type ContentAnalysisResult } from "@/lib/content-analyzer";
 import { hasGeminiKey, hasOpenAIKey, generate } from "@/lib/ai";
+import { getKnowledgeContextForUser } from "@/lib/knowledge-context";
 
 export async function POST(req: Request) {
   try {
@@ -41,7 +42,8 @@ export async function POST(req: Request) {
     });
 
     if (hasGeminiKey() || hasOpenAIKey()) {
-      const enhanced = await enhanceWithAI(content, result);
+      const kb = await getKnowledgeContextForUser(session.id);
+      const enhanced = await enhanceWithAI(content, result, kb);
       return NextResponse.json({ analysis: enhanced });
     }
 
@@ -53,7 +55,8 @@ export async function POST(req: Request) {
 
 async function enhanceWithAI(
   content: string,
-  base: ContentAnalysisResult
+  base: ContentAnalysisResult,
+  knowledgeContext?: string
 ): Promise<ContentAnalysisResult> {
   try {
     const raw = await generate(
@@ -63,7 +66,8 @@ Scores: readability ${base.scores.readability}, seo ${base.scores.seo}, engageme
 
 Content:
 ${content.slice(0, 2500)}`,
-      800
+      800,
+      knowledgeContext
     );
     const parsed = JSON.parse(raw.replace(/```json\n?|\n?```/g, ""));
     const extraSuggestions = (parsed.suggestions ?? []).slice(0, 3).map((text: string) => ({

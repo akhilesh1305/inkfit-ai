@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateBlog } from "@/lib/ai";
+import { getSession } from "@/lib/auth";
+import { getKnowledgeContextForUser } from "@/lib/knowledge-context";
 import { prisma } from "@/lib/prisma";
 import type { BrandKit } from "@/lib/brand";
 
@@ -31,7 +33,16 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const brand = await getBrand();
-    const content = await generateBlog({ ...body, brand, audience: body.audience || brand?.targetAudience });
+    const session = await getSession();
+    const knowledgeContext = session
+      ? await getKnowledgeContextForUser(session.id)
+      : undefined;
+    const content = await generateBlog({
+      ...body,
+      brand,
+      audience: body.audience || brand?.targetAudience,
+      knowledgeContext,
+    });
     await trackUsage();
     return NextResponse.json({ content });
   } catch (e) {

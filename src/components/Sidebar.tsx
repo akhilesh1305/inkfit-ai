@@ -31,7 +31,13 @@ import {
   FolderKanban,
   Target,
   LayoutTemplate,
+  Cpu,
   UsersRound,
+  TrendingUp,
+  BookMarked,
+  Sparkles,
+  Puzzle,
+  Clapperboard,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -42,6 +48,9 @@ const navSections = [
     label: "Overview",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/dashboard/marketing-os", label: "Marketing OS", icon: Cpu },
+      { href: "/dashboard/trends", label: "Trend Discovery", icon: TrendingUp },
+      { href: "/dashboard/knowledge", label: "Knowledge Base", icon: BookMarked },
       { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
       { href: "/dashboard/agent", label: "Content Agent", icon: Bot },
       { href: "/dashboard/workspace", label: "Workspace", icon: FolderKanban },
@@ -58,7 +67,9 @@ const navSections = [
       { href: "/dashboard/social", label: "Social Posts", icon: Share2 },
       { href: "/dashboard/repurpose", label: "Content Repurposer", icon: Repeat2 },
       { href: "/dashboard/website-generator", label: "Website Generator", icon: Globe },
+      { href: "/dashboard/landing-pages", label: "Landing Pages", icon: LayoutTemplate },
       { href: "/dashboard/images", label: "Image Studio", icon: Image },
+      { href: "/dashboard/video", label: "Video & Podcast", icon: Clapperboard },
     ],
   },
   {
@@ -79,9 +90,11 @@ const navSections = [
       { href: "/dashboard/calendar", label: "Calendar", icon: Calendar },
       { href: "/dashboard/team", label: "Team", icon: Users },
       { href: "/dashboard/clients", label: "Clients", icon: Building2 },
+      { href: "/dashboard/white-label", label: "White Label", icon: Sparkles },
       { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
       { href: "/dashboard/referrals", label: "Referrals", icon: UsersRound },
       { href: "/dashboard/publish", label: "Publishing Center", icon: Send },
+      { href: "/dashboard/extensions", label: "Extension", icon: Puzzle },
     ],
   },
 ];

@@ -2,14 +2,16 @@
 
 import { motion } from "framer-motion";
 import {
-  Lightbulb,
-  MessageSquare,
-  TrendingUp,
   Calendar,
+  Linkedin,
+  BookOpen,
+  MessageSquareQuote,
   Copy,
   Check,
+  ArrowRight,
 } from "lucide-react";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type { PersonalBrandOutput } from "@/lib/personal-brand";
 import { cn } from "@/lib/utils";
 
@@ -18,46 +20,21 @@ const TYPE_STYLES = {
   story: "bg-accent-cyan/15 text-cyan-300 border-accent-cyan/25",
   engage: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
   repurpose: "bg-amber-500/15 text-amber-300 border-amber-500/25",
+  commentary: "bg-violet-500/15 text-violet-300 border-violet-500/25",
 };
+
+type ContentTab = "plan" | "linkedin" | "stories" | "commentary";
 
 interface BrandContentPanelProps {
   output: PersonalBrandOutput | null;
   loading: boolean;
 }
 
-function CopyList({ items, title }: { items: string[]; title: string }) {
-  const [copied, setCopied] = useState(false);
-
-  async function copy() {
-    await navigator.clipboard.writeText(items.map((item, i) => `${i + 1}. ${item}`).join("\n\n"));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  return (
-    <div className="card">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="font-semibold text-content">{title}</h3>
-        <button type="button" onClick={copy} className="btn-ghost !rounded-lg !px-2 !py-1 text-xs">
-          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-        </button>
-      </div>
-      <ul className="space-y-2">
-        {items.map((item, i) => (
-          <li
-            key={i}
-            className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-sm leading-relaxed text-content-muted"
-          >
-            <span className="mr-2 font-semibold text-brand-400">{i + 1}.</span>
-            {item}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 export function BrandContentPanel({ output, loading }: BrandContentPanelProps) {
+  const router = useRouter();
+  const [tab, setTab] = useState<ContentTab>("plan");
+  const [copied, setCopied] = useState<string | null>(null);
+
   if (loading) {
     return (
       <div className="card flex h-64 items-center justify-center">
@@ -68,80 +45,163 @@ export function BrandContentPanel({ output, loading }: BrandContentPanelProps) {
 
   if (!output) return null;
 
+  async function copyText(text: string, key: string) {
+    await navigator.clipboard.writeText(text);
+    setCopied(key);
+    setTimeout(() => setCopied(null), 2000);
+  }
+
+  function openInLinkedInStudio(hook: string, angle: string) {
+    sessionStorage.setItem(
+      "inkfit-template",
+      JSON.stringify({ title: hook, body: `${hook}\n\n${angle}` })
+    );
+    router.push("/dashboard/linkedin");
+  }
+
+  const tabs: { id: ContentTab; label: string; icon: typeof Calendar }[] = [
+    { id: "plan", label: "Weekly Plan", icon: Calendar },
+    { id: "linkedin", label: "LinkedIn Ideas", icon: Linkedin },
+    { id: "stories", label: "Story Ideas", icon: BookOpen },
+    { id: "commentary", label: "Commentary", icon: MessageSquareQuote },
+  ];
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
+      className="overflow-hidden rounded-2xl border border-white/10 bg-ink-surface/60 shadow-card"
     >
-      {/* Weekly recommendations */}
-      <div className="overflow-hidden rounded-2xl border border-white/10 bg-ink-surface/60 shadow-card">
-        <div className="flex items-center gap-2 border-b border-white/10 px-6 py-4">
-          <Calendar className="h-4 w-4 text-brand-400" />
-          <h3 className="font-semibold text-content">Weekly Recommendations</h3>
-        </div>
-        <div className="divide-y divide-white/[0.06]">
-          {output.weeklyRecommendations.map((rec, i) => (
-            <div
-              key={i}
-              className="flex flex-wrap items-center gap-4 px-6 py-4 transition hover:bg-white/[0.02]"
-            >
-              <span className="w-24 shrink-0 text-sm font-semibold text-content">{rec.day}</span>
-              <span
-                className={cn(
-                  "shrink-0 rounded-lg border px-2 py-0.5 text-[10px] font-semibold uppercase",
-                  TYPE_STYLES[rec.type]
-                )}
-              >
-                {rec.type}
-              </span>
-              <p className="min-w-0 flex-1 text-sm text-content-muted">{rec.action}</p>
-            </div>
-          ))}
-        </div>
+      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 py-3">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={cn(
+              "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition",
+              tab === t.id
+                ? "bg-brand-600 text-white"
+                : "text-content-muted hover:bg-white/[0.05] hover:text-white"
+            )}
+          >
+            <t.icon className="h-3.5 w-3.5" />
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <CopyList items={output.contentIdeas} title="Content Ideas" />
-        <div className="card">
-          <div className="mb-4 flex items-center gap-2">
-            <MessageSquare className="h-4 w-4 text-accent-blue" />
-            <h3 className="font-semibold text-content">Post Suggestions</h3>
+      <div className="p-4 sm:p-6">
+        {tab === "plan" && (
+          <div className="divide-y divide-white/[0.06] rounded-xl border border-white/[0.06]">
+            {output.weeklyContentPlan.map((item, i) => (
+              <div
+                key={i}
+                className="flex flex-wrap items-start gap-3 px-4 py-4 transition hover:bg-white/[0.02] sm:items-center"
+              >
+                <span className="w-20 shrink-0 text-sm font-semibold text-white">{item.day}</span>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-lg border px-2 py-0.5 text-[9px] font-semibold uppercase",
+                    TYPE_STYLES[item.type]
+                  )}
+                >
+                  {item.type}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-white">{item.title}</p>
+                  <p className="mt-0.5 text-xs text-content-muted">{item.action}</p>
+                  <p className="mt-1 text-[10px] text-content-subtle">Format: {item.format}</p>
+                </div>
+              </div>
+            ))}
           </div>
+        )}
+
+        {tab === "linkedin" && (
           <div className="space-y-3">
-            {output.postSuggestions.map((post, i) => (
+            {output.linkedInPostIdeas.map((idea, i) => (
               <div
                 key={i}
                 className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
               >
-                <p className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-content-muted">
-                  {post}
+                <p className="font-semibold text-white">{idea.hook}</p>
+                <div className="mt-2 grid gap-1 text-xs text-content-muted sm:grid-cols-3">
+                  <span>
+                    <strong className="text-content-subtle">Angle:</strong> {idea.angle}
+                  </span>
+                  <span>
+                    <strong className="text-content-subtle">Format:</strong> {idea.format}
+                  </span>
+                  <span>
+                    <strong className="text-content-subtle">CTA:</strong> {idea.cta}
+                  </span>
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    className="btn-primary !px-3 !py-1.5 text-xs"
+                    onClick={() => openInLinkedInStudio(idea.hook, idea.angle)}
+                  >
+                    Use in LinkedIn Studio <ArrowRight className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost !px-2 !py-1.5 text-xs"
+                    onClick={() => copyText(`${idea.hook}\n\n${idea.angle}\n\nCTA: ${idea.cta}`, `li-${i}`)}
+                  >
+                    {copied === `li-${i}` ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab === "stories" && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {output.storyIdeas.map((story, i) => (
+              <div
+                key={i}
+                className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4"
+              >
+                <p className="font-semibold text-white">{story.title}</p>
+                <p className="mt-2 text-xs text-content-muted">
+                  <span className="font-medium text-cyan-400">Arc:</span> {story.arc}
+                </p>
+                <p className="mt-1 text-xs text-content-muted">
+                  <span className="font-medium text-cyan-400">Emotion:</span> {story.emotion}
                 </p>
               </div>
             ))}
           </div>
-        </div>
-      </div>
+        )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <CopyList items={output.storyTopics} title="Story Topics" />
-        <div className="card">
-          <div className="mb-4 flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-emerald-400" />
-            <h3 className="font-semibold text-content">Industry Trends</h3>
-          </div>
-          <ul className="space-y-2">
-            {output.industryTrends.map((trend, i) => (
-              <li
+        {tab === "commentary" && (
+          <div className="space-y-4">
+            {output.industryCommentary.map((item, i) => (
+              <div
                 key={i}
-                className="flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-content-muted"
+                className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4"
               >
-                <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-                {trend}
-              </li>
+                <p className="font-semibold text-white">{item.topic}</p>
+                <p className="mt-1 text-sm italic text-violet-300">{item.stance}</p>
+                <ul className="mt-3 space-y-1.5">
+                  {item.talkingPoints.map((point, j) => (
+                    <li key={j} className="flex items-start gap-2 text-xs text-content-muted">
+                      <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-violet-400" />
+                      {point}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
-        </div>
+          </div>
+        )}
       </div>
     </motion.div>
   );

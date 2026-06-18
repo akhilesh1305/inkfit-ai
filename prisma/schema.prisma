@@ -239,3 +239,96 @@ model ReferralInvite {
   rewardCredits Int      @default(0)
   createdAt     DateTime @default(now())
 }
+
+model MarketingOSPlan {
+  id        String   @id @default(cuid())
+  userId    String
+  goal      String
+  title     String
+  data      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model KnowledgeDocument {
+  id         String   @id @default(cuid())
+  userId     String
+  name       String
+  category   String   @default("general")
+  sourceType String
+  sourceUrl  String?
+  content    String
+  status     String   @default("ready")
+  fileSize   Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model WhiteLabelSettings {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  enabled          Boolean  @default(false)
+  brandName        String   @default("Your Agency")
+  logoDataUrl      String?
+  customDomain     String?
+  domainStatus     String   @default("none")
+  primaryColor     String   @default("#7C3AED")
+  secondaryColor   String   @default("#06B6D4")
+  accentColor      String   @default("#A78BFA")
+  loginHeadline    String   @default("Welcome back")
+  loginSubheadline String   @default("Sign in to your client portal")
+  loginTagline     String   @default("Your branded content workspace")
+  portalWelcome    String   @default("Client Portal")
+  hidePoweredBy    Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model PersonalBrandProfile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  name           String
+  industry       String
+  targetAudience String
+  platform       String   @default("LinkedIn")
+  outputData     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model ExtensionSettings {
+  id         String    @id @default(cuid())
+  userId     String    @unique
+  installed  Boolean   @default(false)
+  version    String?
+  lastSeenAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model ExtensionIntegration {
+  id         String    @id @default(cuid())
+  userId     String
+  platform   String
+  connected  Boolean   @default(false)
+  account    String?
+  usageCount Int       @default(0)
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([userId, platform])
+}
+
+model ExtensionWebsite {
+  id         String    @id @default(cuid())
+  userId     String
+  domain     String
+  label      String?
+  status     String    @default("active")
+  lastSyncAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([userId, domain])
+}
