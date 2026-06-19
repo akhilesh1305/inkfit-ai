@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { gateAuth } from "@/lib/credit-api";
+import { assertSafeFetchUrl } from "@/lib/ssrf-guard";
 import {
   DEMO_DOCUMENTS,
   type KnowledgeCategory,
@@ -57,6 +58,7 @@ async function seedForUser(userId: string) {
 
 async function fetchUrlText(url: string): Promise<string> {
   try {
+    assertSafeFetchUrl(url);
     const res = await fetch(url, {
       headers: { "User-Agent": "InkFitAI-KnowledgeBot/1.0" },
       signal: AbortSignal.timeout(10000),
@@ -77,15 +79,14 @@ async function fetchUrlText(url: string): Promise<string> {
 
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:read");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
 
-    await seedForUser(session.id);
+    await seedForUser(userId);
 
     const rows = await prisma.knowledgeDocument.findMany({
-      where: { userId: session.id },
+      where: { userId },
       orderBy: { createdAt: "desc" },
     });
 
@@ -105,10 +106,9 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:write");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
 
     const body = await req.json();
 
@@ -120,7 +120,7 @@ export async function POST(req: Request) {
 
       const row = await prisma.knowledgeDocument.create({
         data: {
-          userId: session.id,
+          userId,
           name: String(body.name ?? "Untitled").trim(),
           category: (body.category as KnowledgeCategory) ?? "general",
           sourceType: (body.sourceType as KnowledgeSourceType) ?? "txt",
@@ -139,9 +139,18 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Valid URL required" }, { status: 400 });
       }
 
+      try {
+        assertSafeFetchUrl(url);
+      } catch (e) {
+        return NextResponse.json(
+          { error: e instanceof Error ? e.message : "URL not allowed" },
+          { status: 400 }
+        );
+      }
+
       const processing = await prisma.knowledgeDocument.create({
         data: {
-          userId: session.id,
+          userId,
           name: new URL(url).hostname,
           category: (body.category as KnowledgeCategory) ?? "general",
           sourceType: "url",
@@ -163,14 +172,14 @@ export async function POST(req: Request) {
 
     if (body.action === "delete") {
       await prisma.knowledgeDocument.deleteMany({
-        where: { id: body.id, userId: session.id },
+        where: { id: body.id, userId },
       });
       return NextResponse.json({ ok: true });
     }
 
     if (body.action === "update-category") {
       const row = await prisma.knowledgeDocument.updateMany({
-        where: { id: body.id, userId: session.id },
+        where: { id: body.id, userId },
         data: { category: body.category },
       });
       if (row.count === 0) {

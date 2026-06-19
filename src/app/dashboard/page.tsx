@@ -11,8 +11,11 @@ import {
   Zap,
   Linkedin,
   Palette,
+  Briefcase,
+  Sparkles,
 } from "lucide-react";
-import { getDemoCalendarEvents } from "@/lib/ai";
+import { DashboardHomeStats } from "@/components/dashboard/DashboardHomeStats";
+import { DashboardUpcomingContent } from "@/components/dashboard/DashboardUpcomingContent";
 import { PageHeader } from "@/components/PageHeader";
 
 const features = [
@@ -26,32 +29,61 @@ const features = [
 ];
 
 export default function DashboardPage() {
-  const upcoming = getDemoCalendarEvents().slice(0, 4);
-
   return (
     <div>
+      <Link
+        href="/dashboard/employee"
+        className="group mb-8 block overflow-hidden rounded-2xl border border-brand-500/30 bg-gradient-to-br from-brand-600/15 via-violet-600/10 to-cyan-600/10 p-6 transition hover:border-brand-500/50 hover:shadow-glow sm:p-8"
+      >
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="max-w-xl">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">
+                Flagship Feature
+              </span>
+              <Sparkles className="h-4 w-4 text-brand-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-content sm:text-3xl">
+              AI Marketing Employee
+            </h2>
+            <p className="mt-2 text-sm text-content-muted sm:text-base">
+              Enter one business goal. Your autonomous AI manager builds strategy, content pillars,
+              posts, images, and a publishing schedule — then you approve and publish.
+            </p>
+            <ul className="mt-4 grid gap-1.5 text-xs text-content-muted sm:grid-cols-2">
+              {[
+                "Marketing strategy",
+                "Content pillars",
+                "Social posts & blog ideas",
+                "AI image assets",
+                "14-day publishing schedule",
+                "One-click calendar sync",
+              ].map((item) => (
+                <li key={item} className="flex items-center gap-1.5">
+                  <Zap className="h-3 w-3 shrink-0 text-amber-400" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="flex shrink-0 flex-col items-center gap-3 sm:items-end">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 to-violet-700 shadow-lg">
+              <Briefcase className="h-8 w-8 text-white" />
+            </div>
+            <span className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white transition group-hover:bg-brand-500">
+              Launch Autonomous Mode
+              <ArrowRight className="h-4 w-4" />
+            </span>
+          </div>
+        </div>
+      </Link>
+
       <PageHeader
         title="Welcome back"
-        description="Your AI content command center — start with LinkedIn, scale to full content ops."
+        description="Your AI content command center — or let AI Employee run the full pipeline for you."
       />
 
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          { label: "Generations This Month", value: "12", icon: Zap, change: "Free plan" },
-          { label: "Scheduled Content", value: "5", icon: Calendar, change: "2 this week" },
-          { label: "Avg. SEO Score", value: "84", icon: TrendingUp, change: "+6 pts" },
-          { label: "Brand Kit", value: "Active", icon: Users, change: "Configured" },
-        ].map((stat) => (
-          <div key={stat.label} className="card">
-            <div className="flex items-center justify-between">
-              <stat.icon className="h-5 w-5 text-brand-600" />
-              <span className="text-xs font-medium text-emerald-600">{stat.change}</span>
-            </div>
-            <p className="mt-3 text-2xl font-bold text-content">{stat.value}</p>
-            <p className="text-sm text-content-subtle">{stat.label}</p>
-          </div>
-        ))}
-      </div>
+      <DashboardHomeStats />
 
       <h2 className="section-title mb-4">Quick Actions</h2>
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -73,28 +105,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="card">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="section-title">Upcoming Content</h2>
-          <Link href="/dashboard/calendar" className="text-sm font-medium text-brand-600 hover:text-brand-700">
-            View calendar →
-          </Link>
-        </div>
-        <div className="divide-y divide-line">
-          {upcoming.map((event) => (
-            <div key={event.id} className="flex items-center justify-between gap-4 py-3">
-              <div className="min-w-0">
-                <p className="font-medium text-content">{event.title}</p>
-                <p className="text-sm text-content-subtle">
-                  {event.type} · {event.status}
-                  {event.platform ? ` · ${event.platform}` : ""}
-                </p>
-              </div>
-              <span className="shrink-0 text-sm text-content-subtle">{event.date}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      <DashboardUpcomingContent />
     </div>
   );
 }

@@ -34,6 +34,7 @@ function mapRow(row: {
   seoArticle: number;
   marketingPlan: number;
   agentRequest: number;
+  bonusCredits?: number;
 }): CreditUsageFields {
   return {
     contentGeneration: row.contentGeneration,
@@ -44,6 +45,10 @@ function mapRow(row: {
   };
 }
 
+function rowBonus(row: { bonusCredits?: number }): number {
+  return row.bonusCredits ?? 0;
+}
+
 async function getOrCreateBalance(userId: string, month: string) {
   const existing = await prisma.creditUsage.findUnique({
     where: { userId_month: { userId, month } },
@@ -51,7 +56,10 @@ async function getOrCreateBalance(userId: string, month: string) {
   if (existing) return existing;
 
   const isFirstMonth = (await prisma.creditUsage.count({ where: { userId } })) === 0;
-  const seed = isFirstMonth ? DEMO_CREDIT_FIELDS : emptyFields();
+  const seed =
+    isFirstMonth && process.env.NODE_ENV !== "production"
+      ? DEMO_CREDIT_FIELDS
+      : emptyFields();
 
   return prisma.creditUsage.create({
     data: {
@@ -70,7 +78,7 @@ export async function getCreditSummaryForUser(
   try {
     const month = getMonthKey();
     const row = await getOrCreateBalance(userId, month);
-    return buildCreditSummary(planId, planName, mapRow(row));
+    return buildCreditSummary(planId, planName, mapRow(row), rowBonus(row));
   } catch {
     return buildCreditSummary(planId, planName, DEMO_CREDIT_FIELDS);
   }
@@ -83,6 +91,30 @@ export interface ConsumeResult {
 }
 
 export async function consumeCredits(
+  userId: string,
+  planId: string,
+  planName: string,
+  action: CreditActionType,
+  quantity = 1
+): Promise<ConsumeResult> {
+  const check = await checkCredits(userId, planId, planName, action, quantity);
+  if (!check.ok) return check;
+
+  const month = getMonthKey();
+  const field = FIELD_MAP[action];
+
+  await getOrCreateBalance(userId, month);
+  await prisma.creditUsage.update({
+    where: { userId_month: { userId, month } },
+    data: { [field]: { increment: quantity } },
+  });
+
+  const summary = await getCreditSummaryForUser(userId, planId, planName);
+  return { ok: true, summary };
+}
+
+/** Validate credits without deducting. */
+export async function checkCredits(
   userId: string,
   planId: string,
   planName: string,
@@ -105,17 +137,29 @@ export async function consumeCredits(
     }
   }
 
+  return { ok: true, summary: await getCreditSummaryForUser(userId, planId, planName) };
+}
+
+/** Reverse a charge after a failed generation (best-effort). */
+export async function refundCredits(
+  userId: string,
+  action: CreditActionType,
+  quantity = 1
+): Promise<void> {
   const month = getMonthKey();
   const field = FIELD_MAP[action];
+  const row = await prisma.creditUsage.findUnique({
+    where: { userId_month: { userId, month } },
+  });
+  if (!row) return;
 
-  await getOrCreateBalance(userId, month);
+  const current = row[field] as number;
+  if (current <= 0) return;
+
   await prisma.creditUsage.update({
     where: { userId_month: { userId, month } },
-    data: { [field]: { increment: quantity } },
+    data: { [field]: { decrement: Math.min(quantity, current) } },
   });
-
-  const summary = await getCreditSummaryForUser(userId, planId, planName);
-  return { ok: true, summary };
 }
 
 export async function requireCredits(
@@ -126,6 +170,20 @@ export async function requireCredits(
   quantity = 1
 ): Promise<ConsumeResult> {
   return consumeCredits(userId, planId, planName, action, quantity);
+}
+
+/** Add purchased bonus credits for the current billing month. */
+export async function applyCreditPackBonus(
+  userId: string,
+  credits: number
+): Promise<void> {
+  if (credits <= 0) return;
+  const month = getMonthKey();
+  await getOrCreateBalance(userId, month);
+  await prisma.creditUsage.update({
+    where: { userId_month: { userId, month } },
+    data: { bonusCredits: { increment: credits } },
+  });
 }
 
 export function fieldsToLegacyGenerations(fields: CreditUsageFields): number {

@@ -1,6 +1,9 @@
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
+import type { PlatformRole } from "@/lib/rbac";
+import { DEFAULT_PLATFORM_ROLE, normalizePlatformRole } from "@/lib/rbac";
+import { getAuthSecretKey } from "@/lib/secrets";
 
 const COOKIE_NAME = "inkfit-session";
 
@@ -9,14 +12,11 @@ export interface SessionUser {
   name: string;
   email: string;
   plan: string;
+  platformRole: PlatformRole;
 }
 
 function getSecret() {
-  const secret = process.env.AUTH_SECRET;
-  if (!secret && process.env.NODE_ENV === "production") {
-    throw new Error("AUTH_SECRET must be set in production");
-  }
-  return new TextEncoder().encode(secret || "inkfit-dev-secret-change-in-production");
+  return getAuthSecretKey();
 }
 
 export async function hashPassword(password: string) {
@@ -40,10 +40,18 @@ export async function verifySessionToken(token: string): Promise<SessionUser | n
     const { payload } = await jwtVerify(token, getSecret());
     const user = payload.user as SessionUser;
     if (!user?.id || !user?.email) return null;
-    return user;
+    return {
+      ...user,
+      platformRole: normalizePlatformRole(user.platformRole ?? DEFAULT_PLATFORM_ROLE),
+    };
   } catch {
     return null;
   }
+}
+
+/** Decode session from JWT without DB — safe for Edge middleware. */
+export async function decodeSessionToken(token: string): Promise<SessionUser | null> {
+  return verifySessionToken(token);
 }
 
 export async function getSession(): Promise<SessionUser | null> {

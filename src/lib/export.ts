@@ -1,6 +1,5 @@
-import { jsPDF } from "jspdf";
-
-export function exportToPDF(title: string, content: string) {
+export async function exportToPDF(title: string, content: string) {
+  const { jsPDF } = await import("jspdf");
   const doc = new jsPDF();
   const margin = 20;
   const pageWidth = doc.internal.pageSize.getWidth() - margin * 2;

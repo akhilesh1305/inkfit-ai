@@ -57,7 +57,7 @@ export function TeamMembersTable({ members, onRoleChange, onRemove }: TeamMember
   };
 
   const roleStyles: Record<TeamRole, string> = {
-    admin: "bg-brand-500/15 text-brand-300 border-brand-500/25",
+    team_admin: "bg-brand-500/15 text-brand-300 border-brand-500/25",
     editor: "bg-accent-blue/15 text-blue-300 border-accent-blue/25",
     viewer: "bg-white/10 text-content-muted border-white/10",
   };

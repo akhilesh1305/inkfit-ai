@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { CalendarRange } from "lucide-react";
+import { CalendarRange, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { PlanGenerator } from "@/components/calendar/PlanGenerator";
 import { ContentCalendar } from "@/components/calendar/ContentCalendar";
 import {
   generate30DayPlan,
-  STORAGE_KEY,
   type CalendarPlanItem,
   type CalendarPlatformId,
 } from "@/lib/calendar-plan";
@@ -21,37 +20,39 @@ export default function CalendarPage() {
   const [items, setItems] = useState<CalendarPlanItem[]>([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as CalendarPlanItem[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setItems(parsed);
-          setCurrentMonth(new Date(parsed[0].date));
+    async function load() {
+      try {
+        const res = await fetch("/api/calendar");
+        const data = await res.json();
+        if (Array.isArray(data.items) && data.items.length > 0) {
+          setItems(data.items as CalendarPlanItem[]);
+          setCurrentMonth(new Date(data.items[0].date));
         }
+      } catch {
+        /* ignore */
+      } finally {
+        setHydrated(true);
       }
-    } catch {
-      /* ignore */
     }
-    setHydrated(true);
+    load();
   }, []);
 
   const persistItems = useCallback(async (next: CalendarPlanItem[]) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    setSyncing(true);
     try {
       await fetch("/api/calendar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "plan",
-          items: next,
-        }),
+        body: JSON.stringify({ action: "plan", items: next }),
       });
     } catch {
-      /* offline ok */
+      /* offline */
+    } finally {
+      setSyncing(false);
     }
   }, []);
 
@@ -62,18 +63,17 @@ export default function CalendarPage() {
 
   async function handleGenerate() {
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 900));
     const plan = generate30DayPlan({ industry, goals, platforms });
     setItems(plan);
     setCurrentMonth(new Date(plan[0].date));
-    persistItems(plan);
+    await persistItems(plan);
     setLoading(false);
   }
 
   if (!hydrated) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-500/30 border-t-brand-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-brand-500" />
       </div>
     );
   }
@@ -85,9 +85,12 @@ export default function CalendarPage() {
           <span className="flex items-center gap-2">
             <CalendarRange className="h-7 w-7 text-brand-400" />
             Content Calendar
+            {syncing && (
+              <span className="text-xs font-normal text-content-subtle">Saving…</span>
+            )}
           </span>
         }
-        description="Plan 30 days of content across platforms. Drag and drop to reschedule any item."
+        description="Plan, schedule, and manage your content across platforms."
       />
 
       <div className="grid gap-6 xl:grid-cols-[340px_1fr]">
@@ -101,12 +104,11 @@ export default function CalendarPage() {
           onPlatformsChange={setPlatforms}
           onGenerate={handleGenerate}
         />
-
         <ContentCalendar
           items={items}
-          onItemsChange={handleItemsChange}
           currentMonth={currentMonth}
           onMonthChange={setCurrentMonth}
+          onItemsChange={handleItemsChange}
         />
       </div>
     </div>

@@ -1,42 +1,51 @@
 import { NextResponse } from "next/server";
 import { optimizeSEO } from "@/lib/ai";
-import { generateSEOArticle } from "@/lib/seo-content";
-import { gateCredits } from "@/lib/credit-api";
-import { prisma } from "@/lib/prisma";
+import { generateSEOArticleAI } from "@/lib/ai/generations";
+import { gateCredits, chargeAfterGate } from "@/lib/credit-api";
+import { getBrandKit } from "@/lib/ai/context";
+import { saveGeneratedContent } from "@/lib/persistence";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const brand = await prisma.brandKit.findFirst({ orderBy: { updatedAt: "desc" } });
-    const brandKit = brand
-      ? {
-          companyName: brand.companyName,
-          primaryColor: brand.primaryColor,
-          secondaryColor: brand.secondaryColor,
-          accentColor: brand.accentColor,
-          targetAudience: brand.targetAudience,
-          writingStyle: brand.writingStyle,
-          tone: brand.tone,
-          industry: brand.industry ?? undefined,
-        }
-      : undefined;
 
     if (body.action === "write") {
       const gate = await gateCredits("seo_article");
       if (!gate.ok) return gate.response;
 
-      const article = generateSEOArticle({
-        topic: body.topic,
-        targetKeyword: body.targetKeyword,
-        audience: body.audience || brandKit?.targetAudience,
+      const brandKit = await getBrandKit(gate.userId);
+      const article = await generateSEOArticleAI(
+        {
+          topic: body.topic,
+          targetKeyword: body.targetKeyword,
+          audience: body.audience || brandKit?.targetAudience,
+        },
+        { userId: gate.userId }
+      );
+      const saved = await saveGeneratedContent({
+        userId: gate.userId,
+        feature: "seo",
+        title: article.seoTitle,
+        body: article.fullArticle,
+        metadata: { article, live: article.live },
       });
-      return NextResponse.json({ article });
+      if (article.live) await chargeAfterGate(gate, "seo_article");
+      return NextResponse.json({ article, contentId: saved.id });
     }
 
-    const result = await optimizeSEO({
-      ...body,
-      brand: brandKit,
-    });
+    const gate = await gateCredits("content_generation");
+    if (!gate.ok) return gate.response;
+
+    const brandKit = await getBrandKit(gate.userId);
+    const result = await optimizeSEO(
+      {
+        content: body.content,
+        targetKeyword: body.targetKeyword,
+        brand: brandKit,
+      },
+      gate.userId
+    );
+    await chargeAfterGate(gate, "content_generation");
     return NextResponse.json(result);
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

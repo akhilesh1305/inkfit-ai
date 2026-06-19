@@ -101,7 +101,7 @@ export function SEOArticleEditor({
 
   function exportPdf() {
     if (!output) return;
-    exportToPDF(output.seoTitle, formatSEOArticleForExport(output));
+    void exportToPDF(output.seoTitle, formatSEOArticleForExport(output));
   }
 
   function exportWord() {

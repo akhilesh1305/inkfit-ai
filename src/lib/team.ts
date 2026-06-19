@@ -1,39 +1,46 @@
-export type TeamRole = "admin" | "editor" | "viewer";
-
 export type TeamMemberStatus = "active" | "invited" | "suspended";
+
+export type TeamRole = "team_admin" | "editor" | "viewer";
 
 export interface TeamMember {
   id: string;
   name: string;
   email: string;
   role: TeamRole;
-  status: TeamMemberStatus;
+  status: "active" | "invited" | "suspended";
   avatarColor?: string;
+  createdAt: string;
 }
 
-export interface TeamSettings {
+export interface TeamWorkspaceSettings {
   name: string;
   allowInvites: boolean;
   defaultRole: TeamRole;
 }
 
+export type TeamSettings = TeamWorkspaceSettings;
+
 export const TEAM_ROLES: { id: TeamRole; label: string; description: string }[] = [
   {
-    id: "admin",
-    label: "Admin",
-    description: "Full access — invite, manage roles, and workspace settings",
+    id: "team_admin",
+    label: "Team Admin",
+    description: "Manage workspace, invite members, and all content",
   },
   {
     id: "editor",
     label: "Editor",
-    description: "Create and edit content across all tools",
+    description: "Create and edit content, run AI tools",
   },
   {
     id: "viewer",
     label: "Viewer",
-    description: "Read-only access to content and calendars",
+    description: "Read-only access to workspace content",
   },
 ];
+
+export function getRoleLabel(role: TeamRole): string {
+  return TEAM_ROLES.find((r) => r.id === role)?.label ?? role;
+}
 
 export const TEAM_STATUSES: { id: TeamMemberStatus; label: string }[] = [
   { id: "active", label: "Active" },
@@ -41,89 +48,73 @@ export const TEAM_STATUSES: { id: TeamMemberStatus; label: string }[] = [
   { id: "suspended", label: "Suspended" },
 ];
 
-const AVATAR_COLORS = [
-  "#7C3AED",
-  "#3B82F6",
-  "#06B6D4",
-  "#10B981",
-  "#F59E0B",
-  "#EC4899",
-  "#8B5CF6",
-  "#14B8A6",
-];
-
-export function getInitials(name: string): string {
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-}
-
-export function avatarColorForEmail(email: string): string {
-  let hash = 0;
-  for (let i = 0; i < email.length; i++) {
-    hash = email.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
-
-export function getRoleLabel(role: TeamRole): string {
-  return TEAM_ROLES.find((r) => r.id === role)?.label ?? role;
-}
-
 export function getStatusLabel(status: TeamMemberStatus): string {
   return TEAM_STATUSES.find((s) => s.id === status)?.label ?? status;
 }
 
-export const DEMO_MEMBERS: Omit<TeamMember, "id">[] = [
-  {
-    name: "Akhil Sharma",
-    email: "akhil@inkfit.ai",
-    role: "admin",
-    status: "active",
-    avatarColor: "#7C3AED",
-  },
-  {
-    name: "Priya Mehta",
-    email: "priya@agency.com",
-    role: "editor",
-    status: "active",
-    avatarColor: "#3B82F6",
-  },
-  {
-    name: "James Chen",
-    email: "james@clientco.com",
-    role: "editor",
-    status: "active",
-    avatarColor: "#06B6D4",
-  },
-  {
-    name: "Sarah Williams",
-    email: "sarah@clientco.com",
-    role: "viewer",
-    status: "invited",
-    avatarColor: "#10B981",
-  },
-  {
-    name: "Marcus Johnson",
-    email: "marcus@agency.com",
-    role: "viewer",
-    status: "invited",
-    avatarColor: "#F59E0B",
-  },
-  {
-    name: "Elena Rodriguez",
-    email: "elena@startup.io",
-    role: "editor",
-    status: "suspended",
-    avatarColor: "#EC4899",
-  },
-];
+export function getInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
 
-export const DEFAULT_TEAM_SETTINGS: TeamSettings = {
+export function normalizeTeamRole(role: string): TeamRole {
+  if (role === "team_admin" || role === "admin" || role === "owner") return "team_admin";
+  if (role === "viewer") return "viewer";
+  return "editor";
+}
+
+export const DEFAULT_TEAM_SETTINGS: TeamWorkspaceSettings = {
   name: "InkFit Workspace",
   allowInvites: true,
   defaultRole: "editor",
 };
+
+export function avatarColorForEmail(email: string): string {
+  const colors = ["#7C3AED", "#3B82F6", "#06B6D4", "#10B981", "#F59E0B", "#EC4899"];
+  let hash = 0;
+  for (let i = 0; i < email.length; i++) hash = email.charCodeAt(i) + ((hash << 5) - hash);
+  return colors[Math.abs(hash) % colors.length];
+}
+
+export const DEMO_MEMBERS: TeamMember[] = [
+  {
+    id: "1",
+    name: "Alex Morgan",
+    email: "alex@inkfit.ai",
+    role: "team_admin",
+    status: "active",
+    avatarColor: "#7C3AED",
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "2",
+    name: "Jordan Lee",
+    email: "jordan@inkfit.ai",
+    role: "editor",
+    status: "active",
+    avatarColor: "#3B82F6",
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "3",
+    name: "Sam Patel",
+    email: "sam@inkfit.ai",
+    role: "editor",
+    status: "active",
+    avatarColor: "#06B6D4",
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "4",
+    name: "Casey Kim",
+    email: "casey@inkfit.ai",
+    role: "viewer",
+    status: "active",
+    avatarColor: "#10B981",
+    createdAt: new Date().toISOString(),
+  },
+];

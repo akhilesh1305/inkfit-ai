@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { gateAuth } from "@/lib/credit-api";
 import { prisma } from "@/lib/prisma";
 import {
   MARKETPLACE_TEMPLATES,
@@ -47,17 +47,16 @@ function buildResponse(
 
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:read");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
 
     await seedUseCounts();
 
     const [useCounts, favorites] = await Promise.all([
       getUseCountMap(),
       prisma.templateFavorite.findMany({
-        where: { userId: session.id },
+        where: { userId },
         select: { templateId: true },
       }),
     ]);
@@ -85,10 +84,9 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:write");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
 
     const body = await req.json();
     const templateId = String(body.templateId);
@@ -98,19 +96,19 @@ export async function POST(req: Request) {
       if (favorite) {
         await prisma.templateFavorite.upsert({
           where: {
-            userId_templateId: { userId: session.id, templateId },
+            userId_templateId: { userId: userId, templateId },
           },
-          create: { userId: session.id, templateId },
+          create: { userId: userId, templateId },
           update: {},
         });
       } else {
         await prisma.templateFavorite.deleteMany({
-          where: { userId: session.id, templateId },
+          where: { userId: userId, templateId },
         });
       }
 
       const favorites = await prisma.templateFavorite.findMany({
-        where: { userId: session.id },
+        where: { userId: userId },
         select: { templateId: true },
       });
       return NextResponse.json({
@@ -133,7 +131,7 @@ export async function POST(req: Request) {
 
       const workspaceItem = await prisma.workspaceContent.create({
         data: {
-          userId: session.id,
+          userId: userId,
           title: template.title,
           body: template.body,
           type: categoryToWorkspaceType(template.category),

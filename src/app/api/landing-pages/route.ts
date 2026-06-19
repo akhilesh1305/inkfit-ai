@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { gateCredits } from "@/lib/credit-api";
+import { gateCredits, chargeAfterGate } from "@/lib/credit-api";
 import { generate, hasGeminiKey, hasOpenAIKey } from "@/lib/ai";
 import { getKnowledgeContextForUser } from "@/lib/knowledge-context";
 import {
@@ -80,6 +80,7 @@ export async function POST(req: Request) {
     const kb = session ? await getKnowledgeContextForUser(session.id) : undefined;
     const output = await enhanceWithAI(request, base, kb);
 
+    await chargeAfterGate(gate, "content_generation");
     return NextResponse.json({ output });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { gateCredits, chargeAfterGate } from "@/lib/credit-api";
 import { generate, hasGeminiKey, hasOpenAIKey } from "@/lib/ai";
 import { getKnowledgeContextForUser } from "@/lib/knowledge-context";
 import {
@@ -86,10 +87,8 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const gate = await gateCredits("content_generation");
+    if (!gate.ok) return gate.response;
 
     const body = await req.json();
     const request: PersonalBrandRequest = {
@@ -104,15 +103,15 @@ export async function POST(req: Request) {
     }
 
     const base = generatePersonalBrand(request);
-    const kb = await getKnowledgeContextForUser(session.id);
+    const kb = await getKnowledgeContextForUser(gate.userId);
     const brand = await enhanceWithAI(request, base, kb);
 
     const payload = JSON.stringify(brand);
 
     await prisma.personalBrandProfile.upsert({
-      where: { userId: session.id },
+      where: { userId: gate.userId },
       create: {
-        userId: session.id,
+        userId: gate.userId,
         name: request.name,
         industry: request.industry,
         targetAudience: request.targetAudience,
@@ -128,6 +127,7 @@ export async function POST(req: Request) {
       },
     });
 
+    if (brand.live) await chargeAfterGate(gate, "content_generation");
     return NextResponse.json({ brand });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

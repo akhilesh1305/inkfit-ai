@@ -5,6 +5,8 @@ export type CreditActionType =
   | "marketing_plan"
   | "agent_request";
 
+import { getPlanLimits } from "@/lib/billing-plans";
+
 export type CreditWarningLevel = "none" | "approaching" | "critical" | "depleted";
 
 export interface CreditCategoryMeta {
@@ -34,14 +36,8 @@ export interface CreditSummary {
   resetDate: string;
   breakdown: CreditBreakdownItem[];
   isUnlimited: boolean;
+  bonusCredits?: number;
 }
-
-export const CREDIT_LIMITS: Record<string, number | "unlimited"> = {
-  free: 100,
-  creator: 2000,
-  pro: 10000,
-  agency: "unlimited",
-};
 
 export const CREDIT_CATEGORIES: CreditCategoryMeta[] = [
   {
@@ -110,7 +106,7 @@ export function getMonthlyResetDate(date = new Date()): Date {
 }
 
 export function getCreditLimit(planId: string): number | "unlimited" {
-  return CREDIT_LIMITS[planId] ?? CREDIT_LIMITS.free;
+  return getPlanLimits(planId).credits;
 }
 
 export function countToCredits(fields: CreditUsageFields): number {
@@ -188,10 +184,20 @@ export const WARNING_META: Record<
   },
 };
 
+export function creditsRemainingWithBonus(
+  creditsUsed: number,
+  limit: number | "unlimited",
+  bonusCredits = 0
+): number | "unlimited" {
+  if (limit === "unlimited") return "unlimited";
+  return Math.max(0, limit - creditsUsed + bonusCredits);
+}
+
 export function buildCreditSummary(
   planId: string,
   planName: string,
-  fields: CreditUsageFields
+  fields: CreditUsageFields,
+  bonusCredits = 0
 ): CreditSummary {
   const limit = getCreditLimit(planId);
   const isUnlimited = limit === "unlimited";
@@ -203,12 +209,13 @@ export function buildCreditSummary(
     planName,
     creditsUsed,
     creditsLimit: limit,
-    creditsRemaining: computeCreditsRemaining(creditsUsed, limit),
+    creditsRemaining: creditsRemainingWithBonus(creditsUsed, limit, bonusCredits),
     percentUsed,
     warningLevel: getWarningLevel(percentUsed, isUnlimited),
     resetDate: getMonthlyResetDate().toISOString(),
     breakdown: buildBreakdown(fields),
     isUnlimited,
+    bonusCredits,
   };
 }
 

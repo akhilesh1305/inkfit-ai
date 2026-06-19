@@ -1,17 +1,15 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { gateCredits, chargeAfterGate } from "@/lib/credit-api";
 import { DEFAULT_BRAND } from "@/lib/brand";
 import { analyzeContent, type ContentAnalysisResult } from "@/lib/content-analyzer";
 import { hasGeminiKey, hasOpenAIKey, generate } from "@/lib/ai";
 import { getKnowledgeContextForUser } from "@/lib/knowledge-context";
+import { getBrandKitForUser } from "@/lib/persistence";
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const gate = await gateCredits("content_generation");
+    if (!gate.ok) return gate.response;
 
     const body = await req.json();
     const content = String(body.content ?? "").trim();
@@ -24,7 +22,7 @@ export async function POST(req: Request) {
 
     if (!brandTone || !targetAudience) {
       try {
-        const brand = await prisma.brandKit.findFirst({ orderBy: { updatedAt: "desc" } });
+        const brand = await getBrandKitForUser(gate.userId);
         brandTone = brandTone ?? brand?.tone ?? DEFAULT_BRAND.tone;
         targetAudience = targetAudience ?? brand?.targetAudience ?? DEFAULT_BRAND.targetAudience;
       } catch {
@@ -42,11 +40,13 @@ export async function POST(req: Request) {
     });
 
     if (hasGeminiKey() || hasOpenAIKey()) {
-      const kb = await getKnowledgeContextForUser(session.id);
+      const kb = await getKnowledgeContextForUser(gate.userId);
       const enhanced = await enhanceWithAI(content, result, kb);
+      await chargeAfterGate(gate, "content_generation");
       return NextResponse.json({ analysis: enhanced });
     }
 
+    await chargeAfterGate(gate, "content_generation");
     return NextResponse.json({ analysis: result });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

@@ -33,32 +33,32 @@ export default function HomePage() {
         <HeroBackground />
         <div className="relative z-10 mx-auto max-w-6xl px-6 pb-12 pt-12 text-center sm:pb-16 sm:pt-20">
           <div className="animate-fade-up badge mb-8">
-            ✨ AI-Powered Content Studio
+            🤖 Your AI Marketing Employee
           </div>
           <h1 className="animate-fade-up-delay-1 text-4xl font-extrabold tracking-tight text-content sm:text-6xl lg:text-7xl lg:leading-[1.05]">
-            Create Content That{" "}
+            Launch Your{" "}
             <span className="text-gradient">
-              Fits Your Brand.
+              AI Marketing Employee.
             </span>
           </h1>
           <p className="animate-fade-up-delay-2 mx-auto mt-6 max-w-2xl text-xl font-medium text-content sm:text-2xl">
-            Scale your marketing with AI.
+            Strategy, content, images, and publishing — on autopilot.
           </p>
           <p className="animate-fade-up-delay-2 mx-auto mt-5 max-w-2xl text-body-lg text-content-muted">
-            InkFit AI helps founders, creators, and businesses generate blogs, social posts,
-            images, and SEO content in minutes — all from one intelligent workspace.
+            InkFit AI runs a full marketing pipeline for your brand: research your audience,
+            draft posts and blogs, generate visuals, and queue content for publish — in one guided flow.
           </p>
           <div className="animate-fade-up-delay-3 mt-10 flex flex-wrap justify-center gap-4">
             <Link
               href="/register"
               className="btn-primary group px-8 py-3.5 text-base"
             >
-              Start Creating Free
+              Launch Your AI Employee
               <ArrowRight className="h-5 w-5 transition duration-300 group-hover:translate-x-1" />
             </Link>
-            <Link href="/#demo" className="btn-secondary group px-8 py-3.5 text-base">
+            <Link href="/register?redirect=/dashboard/employee" className="btn-secondary group px-8 py-3.5 text-base">
               <Play className="h-4 w-4 text-brand-400" />
-              Watch Demo
+              Try Autonomous Mode
             </Link>
           </div>
           <p className="animate-fade-up-delay-4 mt-6 text-sm text-content-subtle">

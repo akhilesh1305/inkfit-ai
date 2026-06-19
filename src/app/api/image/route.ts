@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { gateCredits } from "@/lib/credit-api";
+import { gateCredits, chargeAfterGate } from "@/lib/credit-api";
 import { prisma } from "@/lib/prisma";
 import { generateImage } from "@/lib/ai";
 import { DEMO_GALLERY, getAspectSize, type GalleryImage, type ImageStyleId, type AspectRatioId } from "@/lib/image-studio";
@@ -93,7 +93,7 @@ export async function POST(req: Request) {
         styleId,
         size,
         aspectRatio,
-      });
+      }, session.id);
 
       const item = await prisma.imageStudioItem.create({
         data: {
@@ -106,6 +106,7 @@ export async function POST(req: Request) {
         },
       });
 
+      if (result.live) await chargeAfterGate(gate, "ai_image");
       return NextResponse.json({
         item: mapItem(item),
         live: result.live,

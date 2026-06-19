@@ -35,6 +35,19 @@ export default function RepurposePage() {
     setLoading(true);
     setResults({});
     try {
+      const res = await fetch("/api/repurpose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source, outputs: selected }),
+      });
+      const data = await res.json();
+      if (data.results) {
+        setResults(data.results);
+      } else {
+        const generated = await generateAllRepurpose(source, selected);
+        setResults(generated);
+      }
+    } catch {
       const generated = await generateAllRepurpose(source, selected);
       setResults(generated);
     } finally {

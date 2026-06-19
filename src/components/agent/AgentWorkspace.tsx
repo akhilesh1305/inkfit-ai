@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Plus,
   MessageSquare,
@@ -11,16 +11,13 @@ import {
   Bot,
   Trash2,
   Star,
+  Cloud,
+  CloudOff,
 } from "lucide-react";
 import { AgentMessageBubble } from "@/components/agent/AgentMessageBubble";
 import {
   QUICK_ACTIONS,
-  generateAgentResponse,
   conversationTitle,
-  loadConversations,
-  saveConversations,
-  loadSavedPrompts,
-  saveSavedPrompts,
   type AgentConversation,
   type AgentMessage,
 } from "@/lib/content-agent";
@@ -42,25 +39,35 @@ export function AgentWorkspace() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<"history" | "saved" | "actions">("actions");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const active = conversations.find((c) => c.id === activeId);
 
-  useEffect(() => {
-    setConversations(loadConversations());
-    setSavedPrompts(loadSavedPrompts());
-    setHydrated(true);
+  const loadFromServer = useCallback(async () => {
+    try {
+      const res = await fetch("/api/agent");
+      if (!res.ok) throw new Error("Failed to load");
+      const data = await res.json();
+      setConversations(data.conversations ?? []);
+      setSavedPrompts(data.savedPrompts ?? []);
+      setSyncError(false);
+    } catch {
+      setSyncError(true);
+    } finally {
+      setHydrated(true);
+    }
   }, []);
+
+  useEffect(() => {
+    loadFromServer();
+  }, [loadFromServer]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [active?.messages, loading]);
-
-  function persistConversations(next: AgentConversation[]) {
-    setConversations(next);
-    saveConversations(next);
-  }
 
   function startNewChat() {
     setActiveId(null);
@@ -75,80 +82,124 @@ export function AgentWorkspace() {
     setLoading(true);
 
     const userMsg = newMessage("user", trimmed);
+    const optimisticAssistant = newMessage("assistant", "…");
     let convId = activeId;
-    let updated: AgentConversation[];
+    let optimisticConv: AgentConversation;
 
     if (!convId) {
-      const conv: AgentConversation = {
-        id: `conv-${Date.now()}`,
+      optimisticConv = {
+        id: `temp-${Date.now()}`,
         title: conversationTitle(trimmed),
-        messages: [userMsg],
+        messages: [userMsg, optimisticAssistant],
         updatedAt: new Date().toISOString(),
       };
-      convId = conv.id;
-      updated = [conv, ...conversations];
+      convId = optimisticConv.id;
       setActiveId(convId);
+      setConversations((prev) => [optimisticConv, ...prev]);
     } else {
-      updated = conversations.map((c) =>
-        c.id === convId
-          ? {
-              ...c,
-              messages: [...c.messages, userMsg],
-              updatedAt: new Date().toISOString(),
-            }
-          : c
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === convId
+            ? {
+                ...c,
+                messages: [...c.messages, userMsg, optimisticAssistant],
+                updatedAt: new Date().toISOString(),
+              }
+            : c
+        )
       );
     }
-    persistConversations(updated);
 
-    await new Promise((r) => setTimeout(r, 900));
-
-    let responseText: string;
     try {
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: trimmed }),
+        body: JSON.stringify({
+          prompt: trimmed,
+          conversationId: activeId && !activeId.startsWith("temp-") ? activeId : undefined,
+        }),
       });
       const data = await res.json();
-      responseText = data.response ?? generateAgentResponse(trimmed);
-    } catch {
-      responseText = generateAgentResponse(trimmed);
-    }
 
-    const assistantMsg = newMessage("assistant", responseText);
-    const final = updated.map((c) =>
-      c.id === convId
-        ? {
-            ...c,
-            messages: [...c.messages, assistantMsg],
-            updatedAt: new Date().toISOString(),
+      if (data.conversation) {
+        setConversations((prev) => {
+          const withoutTemp = prev.filter((c) => c.id !== convId);
+          const existing = withoutTemp.find((c) => c.id === data.conversation.id);
+          if (existing) {
+            return [data.conversation, ...withoutTemp.filter((c) => c.id !== data.conversation.id)];
           }
-        : c
-    );
-    persistConversations(final);
-    setLoading(false);
-  }
-
-  function deleteConversation(id: string) {
-    const next = conversations.filter((c) => c.id !== id);
-    persistConversations(next);
-    if (activeId === id) {
-      setActiveId(null);
+          return [data.conversation, ...withoutTemp];
+        });
+        setActiveId(data.conversation.id);
+      }
+      setSyncError(false);
+    } catch {
+      setSyncError(true);
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === convId
+            ? {
+                ...c,
+                messages: c.messages.filter((m) => m.id !== optimisticAssistant.id),
+              }
+            : c
+        )
+      );
+    } finally {
+      setLoading(false);
     }
   }
 
-  function savePrompt(prompt: string) {
-    if (savedPrompts.includes(prompt)) return;
-    const next = [prompt, ...savedPrompts].slice(0, 20);
-    setSavedPrompts(next);
-    saveSavedPrompts(next);
+  async function deleteConversation(id: string) {
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+    if (activeId === id) setActiveId(null);
+
+    if (!id.startsWith("temp-")) {
+      setSyncing(true);
+      try {
+        await fetch("/api/agent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "delete", conversationId: id }),
+        });
+      } catch {
+        setSyncError(true);
+        await loadFromServer();
+      } finally {
+        setSyncing(false);
+      }
+    }
   }
 
-  function removeSavedPrompt(prompt: string) {
-    const next = savedPrompts.filter((p) => p !== prompt);
-    setSavedPrompts(next);
-    saveSavedPrompts(next);
+  async function savePrompt(prompt: string) {
+    if (savedPrompts.includes(prompt)) return;
+    setSavedPrompts((prev) => [prompt, ...prev].slice(0, 20));
+    try {
+      const res = await fetch("/api/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "save-prompt", prompt }),
+      });
+      const data = await res.json();
+      if (data.savedPrompts) setSavedPrompts(data.savedPrompts);
+    } catch {
+      setSyncError(true);
+    }
+  }
+
+  async function removeSavedPrompt(prompt: string) {
+    setSavedPrompts((prev) => prev.filter((p) => p !== prompt));
+    try {
+      const res = await fetch("/api/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "remove-prompt", prompt }),
+      });
+      const data = await res.json();
+      if (data.savedPrompts) setSavedPrompts(data.savedPrompts);
+    } catch {
+      setSyncError(true);
+    }
   }
 
   if (!hydrated) {
@@ -161,13 +212,31 @@ export function AgentWorkspace() {
 
   return (
     <div className="flex h-[calc(100vh-8rem)] min-h-[560px] overflow-hidden rounded-2xl border border-white/10 bg-ink-surface/40 shadow-card">
-      {/* Sidebar */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-white/10 bg-ink-surface/60 md:flex">
         <div className="p-3">
           <button type="button" onClick={startNewChat} className="btn-primary w-full !py-2.5 text-sm">
             <Plus className="h-4 w-4" />
             New Chat
           </button>
+        </div>
+
+        <div className="flex items-center gap-1.5 px-3 pb-2 text-[10px] text-content-subtle">
+          {syncing ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Syncing…
+            </>
+          ) : syncError ? (
+            <>
+              <CloudOff className="h-3 w-3 text-amber-400" />
+              Offline — changes may not persist
+            </>
+          ) : (
+            <>
+              <Cloud className="h-3 w-3 text-emerald-400" />
+              Saved to cloud
+            </>
+          )}
         </div>
 
         <div className="flex border-b border-white/10 px-2">
@@ -203,7 +272,8 @@ export function AgentWorkspace() {
                   key={action.id}
                   type="button"
                   onClick={() => sendMessage(action.prompt)}
-                  className="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 text-left text-xs text-content-muted transition hover:border-brand-500/30 hover:bg-brand-500/5 hover:text-content"
+                  disabled={loading}
+                  className="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 text-left text-xs text-content-muted transition hover:border-brand-500/30 hover:bg-brand-500/5 hover:text-content disabled:opacity-50"
                 >
                   {action.label}
                 </button>
@@ -276,7 +346,6 @@ export function AgentWorkspace() {
         </div>
       </aside>
 
-      {/* Chat area */}
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-3 border-b border-white/10 bg-white/[0.02] px-4 py-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-600 to-accent-blue">
@@ -306,7 +375,8 @@ export function AgentWorkspace() {
                     key={action.id}
                     type="button"
                     onClick={() => sendMessage(action.prompt)}
-                    className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-content-muted transition hover:border-brand-500/30 hover:text-brand-300"
+                    disabled={loading}
+                    className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-content-muted transition hover:border-brand-500/30 hover:text-brand-300 disabled:opacity-50"
                   >
                     {action.prompt}
                   </button>
@@ -315,9 +385,11 @@ export function AgentWorkspace() {
             </div>
           ) : (
             <div className="mx-auto max-w-3xl space-y-6">
-              {active.messages.map((msg) => (
-                <AgentMessageBubble key={msg.id} message={msg} />
-              ))}
+              {active.messages
+                .filter((m) => m.content !== "…")
+                .map((msg) => (
+                  <AgentMessageBubble key={msg.id} message={msg} />
+                ))}
               {loading && (
                 <div className="flex gap-3">
                   <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-brand-600/30 to-accent-blue/30">

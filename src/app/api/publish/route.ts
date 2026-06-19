@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { gateAuth } from "@/lib/credit-api";
 import { prisma } from "@/lib/prisma";
 import {
   DEMO_POSTS,
@@ -70,7 +70,8 @@ async function seedForUser(userId: string) {
           connected: true,
           account: "akhilesh-sharma",
           profileName: "Akhilesh Sharma",
-          profileImage: "https://ui-avatars.com/api/?name=AS&background=0A66C2&color=ffffff&size=128&bold=true",
+          profileImage:
+            "https://ui-avatars.com/api/?name=AS&background=0A66C2&color=ffffff&size=128&bold=true",
         },
         { userId, platform: "twitter", connected: true, account: "@inkfitai" },
         { userId, platform: "facebook", connected: false, account: null },
@@ -102,17 +103,16 @@ async function seedForUser(userId: string) {
 
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:read");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
 
-    await seedForUser(session.id);
+    await seedForUser(userId);
 
     const [connections, posts] = await Promise.all([
-      prisma.publishConnection.findMany({ where: { userId: session.id } }),
+      prisma.publishConnection.findMany({ where: { userId } }),
       prisma.scheduledPost.findMany({
-        where: { userId: session.id },
+        where: { userId },
         orderBy: [{ scheduledAt: "asc" }, { createdAt: "desc" }],
       }),
     ]);
@@ -141,10 +141,9 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:write");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
 
     const body = await req.json();
 
@@ -154,13 +153,13 @@ export async function POST(req: Request) {
       const account = connected ? (body.account as string) || `@${platform}_account` : null;
 
       await prisma.publishConnection.upsert({
-        where: { userId_platform: { userId: session.id, platform } },
-        create: { userId: session.id, platform, connected, account },
+        where: { userId_platform: { userId, platform } },
+        create: { userId, platform, connected, account },
         update: { connected, account },
       });
 
       const connections = await prisma.publishConnection.findMany({
-        where: { userId: session.id },
+        where: { userId },
       });
       return NextResponse.json({ connections: mapConnections(connections) });
     }
@@ -172,7 +171,7 @@ export async function POST(req: Request) {
 
       const item = await prisma.scheduledPost.create({
         data: {
-          userId: session.id,
+          userId,
           platform: body.platform as PublishPlatformId,
           title: String(body.title).trim(),
           content: String(body.content).trim(),
@@ -189,7 +188,7 @@ export async function POST(req: Request) {
 
     if (body.action === "update") {
       const existing = await prisma.scheduledPost.findFirst({
-        where: { id: body.id, userId: session.id },
+        where: { id: body.id, userId },
       });
       if (!existing) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -219,7 +218,7 @@ export async function POST(req: Request) {
 
     if (body.action === "delete") {
       const existing = await prisma.scheduledPost.findFirst({
-        where: { id: body.id, userId: session.id },
+        where: { id: body.id, userId },
       });
       if (!existing) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -234,17 +233,15 @@ export async function POST(req: Request) {
   }
 }
 
-// Legacy publish-now endpoint
 export async function PUT(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:write");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
 
     const { platform, title, content } = await req.json();
     const conn = await prisma.publishConnection.findFirst({
-      where: { userId: session.id, platform },
+      where: { userId, platform },
     });
     if (!conn?.connected) {
       return NextResponse.json({ error: `Connect ${platform} first` }, { status: 400 });
@@ -252,7 +249,7 @@ export async function PUT(req: Request) {
 
     const item = await prisma.scheduledPost.create({
       data: {
-        userId: session.id,
+        userId,
         platform,
         title: String(title).trim(),
         content: String(content).trim(),

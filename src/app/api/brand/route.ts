@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { DEFAULT_BRAND } from "@/lib/brand";
+import { getBrandKitForUser, upsertBrandKitForUser } from "@/lib/persistence";
+import { requirePermission } from "@/lib/auth-guard";
+import { gateAuth } from "@/lib/credit-api";
 
 export async function GET() {
   try {
-    const brand = await prisma.brandKit.findFirst({ orderBy: { updatedAt: "desc" } });
+    const auth = await gateAuth("content:read");
+    if (!auth.ok) return auth.response;
+
+    const brand = await getBrandKitForUser(auth.ctx.user.id);
     if (!brand) return NextResponse.json({ brand: DEFAULT_BRAND });
+
     return NextResponse.json({
       brand: {
         id: brand.id,
@@ -26,9 +32,11 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const auth = await requirePermission("settings:brand");
+    if (!auth.ok) return auth.response;
+
     const body = await req.json();
-    const existing = await prisma.brandKit.findFirst();
-    const data = {
+    const brand = await upsertBrandKitForUser(auth.ctx.user.id, {
       companyName: body.companyName,
       primaryColor: body.primaryColor,
       secondaryColor: body.secondaryColor,
@@ -37,10 +45,8 @@ export async function POST(req: Request) {
       writingStyle: body.writingStyle,
       tone: body.tone,
       industry: body.industry || null,
-    };
-    const brand = existing
-      ? await prisma.brandKit.update({ where: { id: existing.id }, data })
-      : await prisma.brandKit.create({ data });
+    });
+
     return NextResponse.json({ brand });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

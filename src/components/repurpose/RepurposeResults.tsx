@@ -42,8 +42,21 @@ export function ResultCard({ outputId, content, source, onRegenerate }: ResultCa
 
   async function regenerate() {
     setRegenerating(true);
-    await new Promise((r) => setTimeout(r, 900));
-    onRegenerate(outputId, generateMockRepurpose(source, outputId));
+    try {
+      const res = await fetch("/api/repurpose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source, outputs: [outputId] }),
+      });
+      const data = await res.json();
+      if (data.results?.[outputId]) {
+        onRegenerate(outputId, data.results[outputId]);
+      } else {
+        onRegenerate(outputId, generateMockRepurpose(source, outputId));
+      }
+    } catch {
+      onRegenerate(outputId, generateMockRepurpose(source, outputId));
+    }
     setRegenerating(false);
   }
 

@@ -124,7 +124,7 @@ export function StrategyReport({ output, loading, inputs }: StrategyReportProps)
 
   function handleExport() {
     if (!output) return;
-    exportToPDF(output.title, formatStrategyForExport(output));
+    void exportToPDF(output.title, formatStrategyForExport(output));
   }
 
   const reportDate = new Date(output.generatedAt).toLocaleDateString("en-US", {

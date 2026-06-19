@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { gateAuth } from "@/lib/credit-api";
 import { prisma } from "@/lib/prisma";
 import {
   DEMO_CAMPAIGNS,
@@ -100,20 +100,19 @@ function demoFallback() {
 
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:read");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
 
-    await seedForUser(session.id);
+    await seedForUser(userId);
 
     const [campaigns, items] = await Promise.all([
       prisma.campaign.findMany({
-        where: { userId: session.id },
+        where: { userId },
         orderBy: { updatedAt: "desc" },
       }),
       prisma.campaignItem.findMany({
-        where: { userId: session.id },
+        where: { userId },
         orderBy: [{ sortOrder: "asc" }, { updatedAt: "desc" }],
       }),
     ]);
@@ -129,17 +128,16 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:write");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
 
     const body = await req.json();
 
     if (body.action === "create-campaign") {
       const campaign = await prisma.campaign.create({
         data: {
-          userId: session.id,
+          userId: userId,
           name: String(body.name || "Untitled Campaign").trim(),
           description: String(body.description || "").trim(),
           goal: String(body.goal || "").trim(),
@@ -153,7 +151,7 @@ export async function POST(req: Request) {
 
     if (body.action === "update-campaign") {
       const existing = await prisma.campaign.findFirst({
-        where: { id: body.id, userId: session.id },
+        where: { id: body.id, userId: userId },
       });
       if (!existing) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -174,7 +172,7 @@ export async function POST(req: Request) {
 
     if (body.action === "delete-campaign") {
       const existing = await prisma.campaign.findFirst({
-        where: { id: body.id, userId: session.id },
+        where: { id: body.id, userId: userId },
       });
       if (!existing) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -186,14 +184,14 @@ export async function POST(req: Request) {
 
     if (body.action === "create-item") {
       const campaign = await prisma.campaign.findFirst({
-        where: { id: body.campaignId, userId: session.id },
+        where: { id: body.campaignId, userId: userId },
       });
       if (!campaign) {
         return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
       }
       const item = await prisma.campaignItem.create({
         data: {
-          userId: session.id,
+          userId: userId,
           campaignId: body.campaignId,
           title: String(body.title || "Untitled").trim(),
           type: body.type || "blog",
@@ -207,7 +205,7 @@ export async function POST(req: Request) {
 
     if (body.action === "update-item") {
       const existing = await prisma.campaignItem.findFirst({
-        where: { id: body.id, userId: session.id },
+        where: { id: body.id, userId: userId },
       });
       if (!existing) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -228,7 +226,7 @@ export async function POST(req: Request) {
 
     if (body.action === "delete-item") {
       const existing = await prisma.campaignItem.findFirst({
-        where: { id: body.id, userId: session.id },
+        where: { id: body.id, userId: userId },
       });
       if (!existing) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });

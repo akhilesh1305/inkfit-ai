@@ -1,29 +1,35 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requirePermission } from "@/lib/auth-guard";
 import {
   getPlanById,
   demoInvoices,
-  demoBillingHistory,
   type BillingSummary,
 } from "@/lib/billing";
 import { getCreditSummaryForUser } from "@/lib/credit-service";
-import { createCheckoutSession } from "@/lib/stripe";
+import {
+  applyDemoCheckout,
+  getBillingHistory,
+  getOrCreateSubscription,
+  getTeamBillingSummary,
+  recordBillingEvent,
+  resolveBillingContext,
+} from "@/lib/billing-service";
+import {
+  createBillingPortalSession,
+  createCheckoutSession,
+  createCreditPackCheckoutSession,
+  isStripeConfigured,
+} from "@/lib/stripe";
+import { isDemoBillingAllowed } from "@/lib/billing-demo";
 import { getRequestOrigin } from "@/lib/site";
+import { billingPostSchema } from "@/lib/api-schemas";
+import { CREDIT_PACK } from "@/lib/billing";
+import { applyCreditPackBonus } from "@/lib/credit-service";
 
-async function getOrCreateSubscription(userId: string, planId: string) {
-  let sub = await prisma.subscription.findUnique({ where: { userId } });
-  if (!sub) {
-    sub = await prisma.subscription.create({
-      data: { userId, planId },
-    });
-  }
-  return sub;
-}
-
-async function getUsage(userId: string, planId: string) {
+async function getUsage(billingUserId: string, planId: string) {
   const plan = getPlanById(planId);
-  const creditSummary = await getCreditSummaryForUser(userId, planId, plan.name);
+  const creditSummary = await getCreditSummaryForUser(billingUserId, planId, plan.name);
 
   return {
     generationsUsed: creditSummary.creditsUsed,
@@ -42,20 +48,17 @@ async function getUsage(userId: string, planId: string) {
 
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requirePermission("platform:billing");
+    if (!auth.ok) return auth.response;
 
-    const user = await prisma.user.findUnique({ where: { id: session.id } });
-    const planId = user?.plan ?? session.plan ?? "free";
-    const sub = await getOrCreateSubscription(session.id, planId);
-    const usage = await getUsage(session.id, planId);
+    const ctx = await resolveBillingContext(auth.ctx.user.id);
+    const sub = await getOrCreateSubscription(ctx.billingUserId, ctx.planId);
+    const usage = await getUsage(ctx.billingUserId, ctx.planId);
 
     const dbInvoices = await prisma.invoice.findMany({
-      where: { userId: session.id },
+      where: { userId: ctx.billingUserId },
       orderBy: { createdAt: "desc" },
-      take: 12,
+      take: 24,
     });
 
     const invoices =
@@ -71,20 +74,32 @@ export async function GET() {
             createdAt: inv.createdAt.toISOString(),
             pdfUrl: inv.pdfUrl ?? undefined,
           }))
-        : demoInvoices(planId);
+        : demoInvoices(ctx.planId);
+
+    const billingHistory = await getBillingHistory(ctx.billingUserId);
+    const teamBilling = await getTeamBillingSummary(ctx.billingUserId);
 
     const summary: BillingSummary = {
       subscription: {
         planId: sub.planId,
         status: sub.status as BillingSummary["subscription"]["status"],
+        billingType: (sub.billingType as BillingSummary["subscription"]["billingType"]) ?? ctx.billingType,
+        seatLimit: sub.seatLimit,
+        seatsUsed: teamBilling.seatsUsed,
+        clientLimit: teamBilling.clientLimit,
         stripeCustomerId: sub.stripeCustomerId ?? undefined,
         stripeSubscriptionId: sub.stripeSubscriptionId ?? undefined,
         currentPeriodEnd: sub.currentPeriodEnd?.toISOString(),
+        stripeEnabled: isStripeConfigured(),
       },
       usage,
       invoices,
-      billingHistory: demoBillingHistory(planId),
-      currentPlan: getPlanById(planId),
+      billingHistory:
+        billingHistory.length > 0
+          ? billingHistory
+          : (await import("@/lib/billing")).demoBillingHistory(ctx.planId),
+      currentPlan: getPlanById(ctx.planId),
+      teamBilling,
     };
 
     return NextResponse.json(summary);
@@ -95,79 +110,131 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission("platform:billing");
+    if (!auth.ok) return auth.response;
+
+    const ctx = await resolveBillingContext(auth.ctx.user.id);
+    if (!ctx.isBillingOwner) {
+      return NextResponse.json(
+        { error: "Only the billing account owner can manage subscriptions" },
+        { status: 403 }
+      );
     }
 
-    const body = await req.json();
+    const raw = await req.json();
+    const parsed = billingPostSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid request", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+    const body = parsed.data;
+    const origin = getRequestOrigin(req);
+
+    if (body.action === "portal") {
+      const sub = await getOrCreateSubscription(ctx.billingUserId);
+      if (!sub.stripeCustomerId) {
+        return NextResponse.json({ error: "No Stripe customer on file" }, { status: 400 });
+      }
+      const url = await createBillingPortalSession(
+        sub.stripeCustomerId,
+        `${origin}/dashboard/billing`
+      );
+      if (!url) {
+        return NextResponse.json({ error: "Billing portal unavailable" }, { status: 503 });
+      }
+      return NextResponse.json({ portalUrl: url });
+    }
 
     if (body.action === "checkout") {
-      const planId = body.planId as string;
-      if (!["creator", "pro", "agency"].includes(planId)) {
-        return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
-      }
+      const planId = body.planId;
 
-      const origin = getRequestOrigin(req);
+      const sub = await getOrCreateSubscription(ctx.billingUserId);
       const result = await createCheckoutSession(
         planId,
-        session.id,
-        session.email,
+        ctx.billingUserId,
+        auth.ctx.user.email,
         `${origin}/dashboard/billing?success=1`,
-        `${origin}/dashboard/billing?canceled=1`
+        `${origin}/dashboard/billing?canceled=1`,
+        sub.stripeCustomerId
       );
 
       if (result.mode === "stripe" && result.url) {
-        return NextResponse.json({ checkoutUrl: result.url });
+        return NextResponse.json({ checkoutUrl: result.url, mode: "stripe" });
       }
 
-      // Demo mode: apply plan immediately
-      await prisma.user.update({
-        where: { id: session.id },
-        data: { plan: planId },
-      });
-      await prisma.subscription.upsert({
-        where: { userId: session.id },
-        create: {
-          userId: session.id,
-          planId,
-          status: "active",
-          currentPeriodEnd: new Date(Date.now() + 30 * 86400000),
-        },
-        update: {
-          planId,
-          status: "active",
-          currentPeriodEnd: new Date(Date.now() + 30 * 86400000),
-        },
-      });
+      if (!isDemoBillingAllowed()) {
+        return NextResponse.json(
+          {
+            error:
+              "Live billing is not configured. Set STRIPE_SECRET_KEY or contact support.",
+          },
+          { status: 503 }
+        );
+      }
 
-      const plan = getPlanById(planId);
-      await prisma.invoice.create({
-        data: {
-          userId: session.id,
-          amount: plan.price,
-          currency: "INR",
-          status: "paid",
-          description: `${plan.name} Plan subscription`,
-          periodLabel: new Date().toLocaleDateString("en-US", {
-            month: "long",
-            year: "numeric",
-          }),
-        },
-      });
-
+      await applyDemoCheckout(ctx.billingUserId, planId);
       return NextResponse.json({ success: true, planId, mode: "demo" });
     }
 
+    if (body.action === "buy_credits") {
+      const sub = await getOrCreateSubscription(ctx.billingUserId);
+      const result = await createCreditPackCheckoutSession(
+        ctx.billingUserId,
+        auth.ctx.user.email,
+        `${origin}/dashboard/billing?credits=1`,
+        `${origin}/dashboard/billing?canceled=1`,
+        sub.stripeCustomerId
+      );
+
+      if (result.mode === "stripe" && result.url) {
+        return NextResponse.json({
+          checkoutUrl: result.url,
+          mode: "stripe",
+          credits: result.credits,
+        });
+      }
+
+      if (!isDemoBillingAllowed()) {
+        return NextResponse.json(
+          {
+            error:
+              "Live billing is not configured. Set STRIPE_SECRET_KEY or contact support.",
+          },
+          { status: 503 }
+        );
+      }
+
+      await applyCreditPackBonus(ctx.billingUserId, CREDIT_PACK.credits);
+      await recordBillingEvent(ctx.billingUserId, "credit_pack_purchased", {
+        amount: CREDIT_PACK.priceInr,
+        metadata: { credits: CREDIT_PACK.credits, mode: "demo" },
+      });
+
+      return NextResponse.json({
+        success: true,
+        mode: "demo",
+        credits: CREDIT_PACK.credits,
+      });
+    }
+
     if (body.action === "downgrade" && body.planId === "free") {
-      await prisma.user.update({
-        where: { id: session.id },
-        data: { plan: "free" },
+      const sub = await getOrCreateSubscription(ctx.billingUserId);
+      if (sub.stripeSubscriptionId && isStripeConfigured()) {
+        const { cancelStripeSubscription } = await import("@/lib/stripe");
+        await cancelStripeSubscription(sub.stripeSubscriptionId);
+      }
+
+      const { syncUserPlan } = await import("@/lib/billing-service");
+      await syncUserPlan(ctx.billingUserId, {
+        planId: "free",
+        status: "active",
+        stripeSubscriptionId: null,
+        currentPeriodEnd: null,
       });
-      await prisma.subscription.update({
-        where: { userId: session.id },
-        data: { planId: "free", status: "active" },
-      });
+
+      await recordBillingEvent(ctx.billingUserId, "plan_downgraded", { planId: "free" });
       return NextResponse.json({ success: true, planId: "free" });
     }
 

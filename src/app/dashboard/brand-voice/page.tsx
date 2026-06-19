@@ -34,17 +34,48 @@ export default function BrandVoicePage() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    const existing = loadBrandVoiceProfile();
-    if (existing) {
-      setForm({
-        brandName: existing.brandName,
-        industry: existing.industry,
-        targetAudience: existing.targetAudience,
-        writingStyle: existing.writingStyle,
-        trainingSamples: existing.trainingSamples,
-      });
-      setProfile(existing.profile);
+    async function load() {
+      try {
+        const res = await fetch("/api/brand-voice");
+        const data = await res.json();
+        if (data.profile) {
+          const p = data.profile;
+          setForm({
+            brandName: p.brandName,
+            industry: p.industry,
+            targetAudience: p.targetAudience,
+            writingStyle: p.writingStyle,
+            trainingSamples: p.trainingSamples,
+          });
+          setProfile(p.profile);
+        } else {
+          const existing = loadBrandVoiceProfile();
+          if (existing) {
+            setForm({
+              brandName: existing.brandName,
+              industry: existing.industry,
+              targetAudience: existing.targetAudience,
+              writingStyle: existing.writingStyle,
+              trainingSamples: existing.trainingSamples,
+            });
+            setProfile(existing.profile);
+          }
+        }
+      } catch {
+        const existing = loadBrandVoiceProfile();
+        if (existing) {
+          setForm({
+            brandName: existing.brandName,
+            industry: existing.industry,
+            targetAudience: existing.targetAudience,
+            writingStyle: existing.writingStyle,
+            trainingSamples: existing.trainingSamples,
+          });
+          setProfile(existing.profile);
+        }
+      }
     }
+    load();
   }, []);
 
   function patch(p: Partial<BrandVoiceFormData>) {
@@ -61,18 +92,41 @@ export default function BrandVoicePage() {
   async function handleGenerate() {
     setGenerating(true);
     setSaved(false);
-    await new Promise((r) => setTimeout(r, 1400));
-    setProfile(generateBrandProfile(form));
-    setGenerating(false);
+    try {
+      const res = await fetch("/api/brand-voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "generate", form }),
+      });
+      const data = await res.json();
+      if (data.profile) {
+        setProfile(data.profile);
+      } else {
+        setProfile(generateBrandProfile(form));
+      }
+    } catch {
+      setProfile(generateBrandProfile(form));
+    } finally {
+      setGenerating(false);
+    }
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!profile) return;
     saveBrandVoiceProfile({
       ...form,
       profile,
       savedAt: new Date().toISOString(),
     });
+    try {
+      await fetch("/api/brand-voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "save", form, profile }),
+      });
+    } catch {
+      /* local save still works */
+    }
     setSaved(true);
   }
 

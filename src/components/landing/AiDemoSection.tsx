@@ -115,7 +115,7 @@ export function AiDemoSection() {
       <div className="mx-auto max-w-6xl px-6">
         <FadeIn>
           <div className="text-center">
-            <span className="badge mb-4">Live Demo</span>
+            <span className="badge mb-4">Interactive Demo</span>
             <SectionHeading
               title="Try InkFit AI"
               subtitle="See how quickly AI can generate content for your brand."

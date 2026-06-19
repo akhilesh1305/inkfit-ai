@@ -172,10 +172,8 @@ export const SYSTEM_SERVICES: SystemService[] = [
 
 export function isAdminEmail(email: string): boolean {
   const list = process.env.ADMIN_EMAILS?.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
-  if (list && list.length > 0) {
-    return list.includes(email.toLowerCase());
-  }
-  return process.env.NODE_ENV === "development";
+  if (!list?.length) return false;
+  return list.includes(email.toLowerCase());
 }
 
 export function formatRevenue(amount: number): string {

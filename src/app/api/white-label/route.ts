@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requirePermission } from "@/lib/auth-guard";
 import {
   DEFAULT_WHITE_LABEL,
   normalizeDomain,
   type DomainStatus,
   type WhiteLabelConfig,
 } from "@/lib/white-label";
+import { sanitizeLogoDataUrl } from "@/lib/logo-upload";
 
 function mapRow(row: {
   id: string;
@@ -60,12 +61,10 @@ async function getOrCreate(userId: string): Promise<WhiteLabelConfig> {
 
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requirePermission("settings:white_label");
+    if (!auth.ok) return auth.response;
 
-    const config = await getOrCreate(session.id);
+    const config = await getOrCreate(auth.ctx.user.id);
     return NextResponse.json({ config });
   } catch {
     return NextResponse.json({ config: DEFAULT_WHITE_LABEL });
@@ -74,10 +73,9 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requirePermission("settings:white_label");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
 
     const body = await req.json();
 
@@ -87,15 +85,12 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Brand name is required" }, { status: 400 });
       }
 
-      const logo =
-        data.logoDataUrl && data.logoDataUrl.length > 600_000
-          ? null
-          : data.logoDataUrl;
+      const logo = sanitizeLogoDataUrl(data.logoDataUrl);
 
       const row = await prisma.whiteLabelSettings.upsert({
-        where: { userId: session.id },
+        where: { userId },
         create: {
-          userId: session.id,
+          userId,
           enabled: !!data.enabled,
           brandName: data.brandName.trim(),
           logoDataUrl: logo,
@@ -137,9 +132,9 @@ export async function POST(req: Request) {
       }
 
       const row = await prisma.whiteLabelSettings.upsert({
-        where: { userId: session.id },
+        where: { userId },
         create: {
-          userId: session.id,
+          userId,
           ...DEFAULT_WHITE_LABEL,
           customDomain: domain,
           domainStatus: "verified",
@@ -155,7 +150,7 @@ export async function POST(req: Request) {
 
     if (body.action === "remove-logo") {
       const row = await prisma.whiteLabelSettings.update({
-        where: { userId: session.id },
+        where: { userId },
         data: { logoDataUrl: null },
       });
       return NextResponse.json({ config: mapRow(row) });

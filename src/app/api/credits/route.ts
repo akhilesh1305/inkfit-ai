@@ -1,22 +1,28 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { getPlanById } from "@/lib/billing";
 import { getCreditSummaryForUser } from "@/lib/credit-service";
+import { gateAuth } from "@/lib/credit-api";
+import { resolveBillingContext } from "@/lib/billing-service";
 
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:read");
+    if (!auth.ok) return auth.response;
 
-    const user = await prisma.user.findUnique({ where: { id: session.id } });
-    const planId = user?.plan ?? session.plan ?? "free";
-    const plan = getPlanById(planId);
-    const summary = await getCreditSummaryForUser(session.id, planId, plan.name);
+    const ctx = await resolveBillingContext(auth.ctx.user.id);
+    const plan = getPlanById(ctx.planId);
+    const summary = await getCreditSummaryForUser(
+      ctx.billingUserId,
+      ctx.planId,
+      plan.name
+    );
 
-    return NextResponse.json({ credits: summary });
+    return NextResponse.json({
+      credits: summary,
+      planId: ctx.planId,
+      billingUserId: ctx.billingUserId,
+      isBillingOwner: ctx.isBillingOwner,
+    });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }

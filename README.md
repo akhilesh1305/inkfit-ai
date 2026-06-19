@@ -42,7 +42,7 @@ Set in Vercel environment variables:
 | `NEXT_PUBLIC_APP_URL` | Live URL, e.g. `https://your-domain.vercel.app` |
 | `OPENAI_API_KEY` or `GEMINI_API_KEY` | At least one for AI generation |
 
-Optional (billing): `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, price IDs.
+Optional (billing): `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_CREATOR`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_AGENCY`. See `.env.example`.
 
 ### 3. Deploy
 

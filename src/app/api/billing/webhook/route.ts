@@ -1,16 +1,6 @@
 import { NextResponse } from "next/server";
 import { handleStripeWebhookEvent } from "@/lib/stripe";
 
-/**
- * Stripe webhook endpoint.
- * Set STRIPE_WEBHOOK_SECRET in .env and configure in Stripe Dashboard.
- *
- * Events to handle:
- * - checkout.session.completed
- * - customer.subscription.updated
- * - customer.subscription.deleted
- * - invoice.paid
- */
 export async function POST(req: Request) {
   const signature = req.headers.get("stripe-signature");
   const payload = await req.text();
@@ -20,9 +10,10 @@ export async function POST(req: Request) {
   }
 
   try {
-    handleStripeWebhookEvent(payload, signature);
+    await handleStripeWebhookEvent(payload, signature);
     return NextResponse.json({ received: true });
   } catch (e) {
+    console.error("Stripe webhook error:", e);
     return NextResponse.json({ error: String(e) }, { status: 400 });
   }
 }

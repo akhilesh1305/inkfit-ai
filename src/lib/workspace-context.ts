@@ -6,16 +6,29 @@ export async function getActiveWorkspaceIdForUser(userId: string): Promise<strin
     where: { userId },
   });
   if (pref?.activeWorkspaceId) {
-    const exists = await prisma.workspace.findFirst({
-      where: { id: pref.activeWorkspaceId, ownerId: userId },
+    const wsId = pref.activeWorkspaceId;
+    const owned = await prisma.workspace.findFirst({
+      where: { id: wsId, ownerId: userId },
     });
-    if (exists) return exists.id;
+    if (owned) return owned.id;
+
+    const member = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId: wsId, userId } },
+    });
+    if (member) return wsId;
   }
 
   const defaultWs = await prisma.workspace.findFirst({
     where: { ownerId: userId, isDefault: true },
   });
-  return defaultWs?.id ?? null;
+  if (defaultWs) return defaultWs.id;
+
+  const membership = await prisma.workspaceMember.findFirst({
+    where: { userId },
+    orderBy: { createdAt: "asc" },
+    select: { workspaceId: true },
+  });
+  return membership?.workspaceId ?? null;
 }
 
 export async function setActiveWorkspaceForUser(userId: string, workspaceId: string) {

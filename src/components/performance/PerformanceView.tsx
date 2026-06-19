@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, LineChart } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { PerformanceMetricCards } from "@/components/performance/PerformanceMetricCards";
-import { PerformanceCharts } from "@/components/performance/PerformanceCharts";
+import { LazyPerformanceCharts } from "@/components/charts/lazy-charts";
 import { TopPerformingContent } from "@/components/performance/TopPerformingContent";
 import { ContentLeaderboard } from "@/components/performance/ContentLeaderboard";
 import type {
@@ -73,7 +73,7 @@ export function PerformanceView() {
 
       <PerformanceMetricCards summary={summary} />
 
-      <PerformanceCharts
+      <LazyPerformanceCharts
         data={chartData}
         period={period}
         onPeriodChange={handlePeriodChange}

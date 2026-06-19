@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { gateAuth } from "@/lib/credit-api";
 import { prisma } from "@/lib/prisma";
 import {
   getTrendDiscoveryData,
@@ -9,10 +9,8 @@ import {
 
 export async function GET(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:read");
+    if (!auth.ok) return auth.response;
 
     const { searchParams } = new URL(req.url);
     const category = (searchParams.get("category") ?? "all") as TrendCategory | "all";
@@ -27,10 +25,9 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:write");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
 
     const body = await req.json();
 
@@ -45,7 +42,7 @@ export async function POST(req: Request) {
 
       const item = await prisma.workspaceContent.create({
         data: {
-          userId: session.id,
+          userId,
           title: String(body.title).slice(0, 120),
           body: prompt,
           type: body.contentType ?? "linkedin",

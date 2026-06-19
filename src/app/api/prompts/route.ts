@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { gateAuth } from "@/lib/credit-api";
 import { prisma } from "@/lib/prisma";
 import {
   DEFAULT_COLLECTIONS,
@@ -91,21 +91,26 @@ async function seedPromptLibrary(userId: string) {
 
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:read");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
+    const userName = auth.ctx.user.name;
 
-    await seedPromptLibrary(session.id);
+    await seedPromptLibrary(userId);
 
-    const [collections, prompts] = await Promise.all([
+    const [collections, prompts, history] = await Promise.all([
       prisma.promptCollection.findMany({
-        where: { userId: session.id },
+        where: { userId },
         orderBy: { createdAt: "asc" },
       }),
       prisma.promptLibraryItem.findMany({
-        where: { userId: session.id },
+        where: { userId },
         orderBy: { updatedAt: "desc" },
+      }),
+      prisma.promptUseLog.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        take: 30,
       }),
     ]);
 
@@ -125,6 +130,13 @@ export async function GET() {
       mostUsed: getMostUsed(mapped),
       recentlyUsed: getRecentlyUsed(mapped),
       tags: getAllTags(mapped),
+      history: history.map((h) => ({
+        id: h.id,
+        promptId: h.promptId,
+        promptText: h.promptText,
+        feature: h.feature,
+        createdAt: h.createdAt.toISOString(),
+      })),
     });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
@@ -133,17 +145,16 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:write");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
 
     const body = await req.json();
 
     if (body.action === "create") {
       const row = await prisma.promptLibraryItem.create({
         data: {
-          userId: session.id,
+          userId: userId,
           title: String(body.title ?? "Untitled prompt").trim(),
           body: String(body.body ?? "").trim(),
           category: (body.category as PromptCategoryId) ?? "linkedin",
@@ -157,7 +168,7 @@ export async function POST(req: Request) {
 
     if (body.action === "update") {
       const existing = await prisma.promptLibraryItem.findFirst({
-        where: { id: body.id, userId: session.id },
+        where: { id: body.id, userId: userId },
       });
       if (!existing) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -180,7 +191,7 @@ export async function POST(req: Request) {
 
     if (body.action === "delete") {
       const existing = await prisma.promptLibraryItem.findFirst({
-        where: { id: body.id, userId: session.id },
+        where: { id: body.id, userId: userId },
       });
       if (!existing) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -191,7 +202,7 @@ export async function POST(req: Request) {
 
     if (body.action === "favorite") {
       const existing = await prisma.promptLibraryItem.findFirst({
-        where: { id: body.id, userId: session.id },
+        where: { id: body.id, userId: userId },
       });
       if (!existing) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -205,7 +216,7 @@ export async function POST(req: Request) {
 
     if (body.action === "use") {
       const existing = await prisma.promptLibraryItem.findFirst({
-        where: { id: body.id, userId: session.id },
+        where: { id: body.id, userId: userId },
       });
       if (!existing) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -217,13 +228,21 @@ export async function POST(req: Request) {
           lastUsedAt: new Date(),
         },
       });
+      await prisma.promptUseLog.create({
+        data: {
+          userId: userId,
+          promptId: body.id,
+          promptText: existing.body.slice(0, 2000),
+          feature: body.feature ?? existing.category,
+        },
+      });
       return NextResponse.json({ prompt: mapPrompt(row) });
     }
 
     if (body.action === "create-collection") {
       const row = await prisma.promptCollection.create({
         data: {
-          userId: session.id,
+          userId: userId,
           name: String(body.name ?? "New Collection").trim(),
           icon: String(body.icon ?? "📁"),
           color: String(body.color ?? "#7C3AED"),
@@ -236,13 +255,13 @@ export async function POST(req: Request) {
 
     if (body.action === "delete-collection") {
       const existing = await prisma.promptCollection.findFirst({
-        where: { id: body.id, userId: session.id },
+        where: { id: body.id, userId: userId },
       });
       if (!existing) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
       }
       await prisma.promptLibraryItem.updateMany({
-        where: { userId: session.id, collectionId: body.id },
+        where: { userId: userId, collectionId: body.id },
         data: { collectionId: null },
       });
       await prisma.promptCollection.delete({ where: { id: body.id } });

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { gateAuth } from "@/lib/credit-api";
 import { prisma } from "@/lib/prisma";
 import { getSiteUrl } from "@/lib/site";
 import {
@@ -82,14 +82,14 @@ async function seedForUser(userId: string, userName: string) {
 
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:read");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
+    const userName = auth.ctx.user.name;
 
-    const profile = await seedForUser(session.id, session.name);
+    const profile = await seedForUser(userId, userName);
     const invites = await prisma.referralInvite.findMany({
-      where: { referrerId: session.id },
+      where: { referrerId: userId },
       orderBy: { createdAt: "desc" },
     });
 
@@ -107,11 +107,10 @@ export async function GET() {
       stats,
       invites: invites.map(mapInvite),
       rewards: buildRewards(profile.conversions),
-      leaderboard: buildLeaderboard(session.name, profile.conversions, profile.signups),
+      leaderboard: buildLeaderboard(userName, profile.conversions, profile.signups),
     });
   } catch {
-    const session = await getSession();
-    const code = generateReferralCode(session?.id ?? "demo", session?.name);
+    const code = generateReferralCode("demo", "You");
     const stats = computeStats(342, 18, 8, 950);
     const now = new Date().toISOString();
     return NextResponse.json({
@@ -124,27 +123,26 @@ export async function GET() {
         createdAt: now,
       })),
       rewards: buildRewards(8),
-      leaderboard: buildLeaderboard(session?.name ?? "You", 8, 18),
+      leaderboard: buildLeaderboard("You", 8, 18),
     });
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:read");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
 
     const body = await req.json();
 
     if (body.action === "copy-track") {
       const profile = await prisma.referralProfile.findUnique({
-        where: { userId: session.id },
+        where: { userId },
       });
       if (profile) {
         await prisma.referralProfile.update({
-          where: { userId: session.id },
+          where: { userId },
           data: { clicks: { increment: 1 } },
         });
       }

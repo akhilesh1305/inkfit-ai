@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { gateAuth } from "@/lib/credit-api";
 import { DEMO_CLIENTS } from "@/lib/clients";
 
 function mapClient(c: {
@@ -26,34 +27,45 @@ function mapClient(c: {
   };
 }
 
-async function seedIfEmpty() {
-  const count = await prisma.agencyClient.count();
+async function seedForUser(userId: string) {
+  const count = await prisma.agencyClient.count({ where: { userId } });
   if (count > 0) return;
 
   for (const client of DEMO_CLIENTS) {
-    await prisma.agencyClient.create({ data: client });
+    await prisma.agencyClient.create({ data: { ...client, userId } });
   }
 }
 
 export async function GET() {
   try {
-    await seedIfEmpty();
-    const clients = await prisma.agencyClient.findMany({ orderBy: { name: "asc" } });
+    const auth = await gateAuth("content:read");
+    if (!auth.ok) return auth.response;
+
+    const userId = auth.ctx.user.id;
+    await seedForUser(userId);
+
+    const clients = await prisma.agencyClient.findMany({
+      where: { userId },
+      orderBy: { name: "asc" },
+    });
     return NextResponse.json({ clients: clients.map(mapClient) });
   } catch {
-    return NextResponse.json({
-      clients: DEMO_CLIENTS.map((c, i) => ({ id: `demo-${i}`, ...c })),
-    });
+    return NextResponse.json({ clients: [] });
   }
 }
 
 export async function POST(req: Request) {
   try {
+    const auth = await gateAuth("workspace:manage");
+    if (!auth.ok) return auth.response;
+
+    const userId = auth.ctx.user.id;
     const body = await req.json();
 
     if (body.action === "create") {
       const client = await prisma.agencyClient.create({
         data: {
+          userId,
           name: String(body.name).trim(),
           industry: String(body.industry).trim(),
           website: body.website?.trim() || null,
@@ -68,7 +80,12 @@ export async function POST(req: Request) {
     }
 
     if (body.action === "delete") {
-      await prisma.agencyClient.delete({ where: { id: body.id } });
+      const deleted = await prisma.agencyClient.deleteMany({
+        where: { id: body.id, userId },
+      });
+      if (deleted.count === 0) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
       return NextResponse.json({ ok: true });
     }
 

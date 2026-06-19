@@ -9,14 +9,22 @@ interface PricingCardsProps {
   currentPlanId: string;
   onUpgrade: (planId: string) => Promise<void>;
   upgrading: string | null;
+  stripeEnabled?: boolean;
 }
 
-export function PricingCards({ currentPlanId, onUpgrade, upgrading }: PricingCardsProps) {
+export function PricingCards({
+  currentPlanId,
+  onUpgrade,
+  upgrading,
+  stripeEnabled,
+}: PricingCardsProps) {
   return (
     <div>
       <h3 className="section-title mb-1">Upgrade Your Plan</h3>
       <p className="mb-6 text-xs text-content-subtle">
-        Stripe-ready checkout — demo mode applies upgrades instantly
+        {stripeEnabled
+          ? "Secure checkout powered by Stripe. Manage billing anytime from this page."
+          : "Demo mode — upgrades apply instantly. Add Stripe keys for live billing."}
       </p>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {PLANS.map((plan) => {

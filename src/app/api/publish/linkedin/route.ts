@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { gateAuth } from "@/lib/credit-api";
 import { prisma } from "@/lib/prisma";
 import {
   DEMO_POSTS,
@@ -114,19 +114,18 @@ async function seedLinkedIn(userId: string) {
 
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:read");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
 
-    await seedLinkedIn(session.id);
+    await seedLinkedIn(userId);
 
     const [connectionRow, posts] = await Promise.all([
       prisma.publishConnection.findUnique({
-        where: { userId_platform: { userId: session.id, platform: "linkedin" } },
+        where: { userId_platform: { userId, platform: "linkedin" } },
       }),
       prisma.scheduledPost.findMany({
-        where: { userId: session.id, platform: "linkedin" },
+        where: { userId, platform: "linkedin" },
         orderBy: [{ scheduledAt: "asc" }, { createdAt: "desc" }],
       }),
     ]);
@@ -144,10 +143,9 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:write");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
 
     const body = await req.json();
 
@@ -161,9 +159,9 @@ export async function POST(req: Request) {
       const profileImage = linkedInAvatarUrl(profileName);
 
       await prisma.publishConnection.upsert({
-        where: { userId_platform: { userId: session.id, platform: "linkedin" } },
+        where: { userId_platform: { userId: userId, platform: "linkedin" } },
         create: {
-          userId: session.id,
+          userId: userId,
           platform: "linkedin",
           connected: true,
           account,
@@ -179,7 +177,7 @@ export async function POST(req: Request) {
       });
 
       const row = await prisma.publishConnection.findUnique({
-        where: { userId_platform: { userId: session.id, platform: "linkedin" } },
+        where: { userId_platform: { userId: userId, platform: "linkedin" } },
       });
 
       return NextResponse.json({ connection: mapConnection(row) });
@@ -187,9 +185,9 @@ export async function POST(req: Request) {
 
     if (body.action === "disconnect") {
       await prisma.publishConnection.upsert({
-        where: { userId_platform: { userId: session.id, platform: "linkedin" } },
+        where: { userId_platform: { userId: userId, platform: "linkedin" } },
         create: {
-          userId: session.id,
+          userId: userId,
           platform: "linkedin",
           connected: false,
           account: null,
@@ -216,7 +214,7 @@ export async function POST(req: Request) {
     }
 
     const conn = await prisma.publishConnection.findUnique({
-      where: { userId_platform: { userId: session.id, platform: "linkedin" } },
+      where: { userId_platform: { userId: userId, platform: "linkedin" } },
     });
 
     if (body.action === "create" || body.action === "publish-now") {
@@ -237,7 +235,7 @@ export async function POST(req: Request) {
 
       const item = await prisma.scheduledPost.create({
         data: {
-          userId: session.id,
+          userId: userId,
           platform: "linkedin",
           title: String(body.title ?? "LinkedIn post").trim(),
           content: String(body.content).trim(),
@@ -254,7 +252,7 @@ export async function POST(req: Request) {
       const posts = filterLinkedInPosts(
         (
           await prisma.scheduledPost.findMany({
-            where: { userId: session.id, platform: "linkedin" },
+            where: { userId: userId, platform: "linkedin" },
           })
         ).map(mapPost)
       );
@@ -267,7 +265,7 @@ export async function POST(req: Request) {
 
     if (body.action === "update") {
       const existing = await prisma.scheduledPost.findFirst({
-        where: { id: body.id, userId: session.id, platform: "linkedin" },
+        where: { id: body.id, userId: userId, platform: "linkedin" },
       });
       if (!existing) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -296,7 +294,7 @@ export async function POST(req: Request) {
 
     if (body.action === "delete") {
       const existing = await prisma.scheduledPost.findFirst({
-        where: { id: body.id, userId: session.id, platform: "linkedin" },
+        where: { id: body.id, userId: userId, platform: "linkedin" },
       });
       if (!existing) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });

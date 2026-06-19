@@ -22,7 +22,7 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function computeSEOScore(
+export function computeSEOScore(
   req: SEOArticleRequest,
   output: Omit<SEOArticleOutput, "seoScore">
 ): number {

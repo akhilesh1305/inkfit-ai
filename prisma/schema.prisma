@@ -10,6 +10,7 @@ datasource db {
 
 model BrandKit {
   id              String   @id @default(cuid())
+  userId          String?  @unique
   companyName     String
   primaryColor    String   @default("#4f46e5")
   secondaryColor  String   @default("#6366f1")
@@ -23,14 +24,20 @@ model BrandKit {
 }
 
 model CalendarEvent {
-  id        String   @id @default(cuid())
-  title     String
-  type      String
-  date      String
-  status    String   @default("draft")
-  platform  String?
-  content   String?
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  userId      String?
+  workspaceId String?
+  title       String
+  type        String
+  date        String
+  status      String   @default("draft")
+  platform    String?
+  content     String?
+  metadata    String   @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, date])
 }
 
 model Usage {
@@ -48,13 +55,14 @@ model PlatformConnection {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String
-  plan      String   @default("free")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  password     String
+  plan         String   @default("free")
+  platformRole String   @default("agency_owner")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model TeamWorkspace {
@@ -79,6 +87,7 @@ model TeamMember {
 
 model AgencyClient {
   id              String   @id @default(cuid())
+  userId          String?
   name            String
   industry        String
   website         String?
@@ -89,6 +98,8 @@ model AgencyClient {
   calendarItems   Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model Subscription {
@@ -96,11 +107,30 @@ model Subscription {
   userId               String    @unique
   planId               String    @default("free")
   status               String    @default("active")
+  billingType          String    @default("individual")
+  seatLimit            Int       @default(1)
+  seatsUsed            Int       @default(1)
+  clientLimit          Int       @default(1)
+  workspaceId          String?
   stripeCustomerId     String?
   stripeSubscriptionId String?
   currentPeriodEnd     DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
+}
+
+model BillingEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  event     String
+  planId    String?
+  amount    Int?
+  currency  String   @default("INR")
+  stripeRef String?
+  metadata  String   @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model Invoice {
@@ -114,6 +144,8 @@ model Invoice {
   pdfUrl          String?
   periodLabel     String
   createdAt       DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model WorkspaceFolder {
@@ -364,10 +396,22 @@ model CreditUsage {
   seoArticle        Int      @default(0)
   marketingPlan     Int      @default(0)
   agentRequest      Int      @default(0)
+  bonusCredits      Int      @default(0)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   @@unique([userId, month])
+}
+
+model AiGenerationLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  feature   String
+  provider  String
+  tokens    Int?
+  success   Boolean  @default(true)
+  error     String?
+  createdAt DateTime @default(now())
 }
 
 model Workflow {
@@ -467,17 +511,174 @@ model UserWorkspacePreference {
   id                String   @id @default(cuid())
   userId            String   @unique
   activeWorkspaceId String?
+  settings          String   @default("{}")
   updatedAt         DateTime @updatedAt
 }
 
+model GeneratedContent {
+  id          String   @id @default(cuid())
+  userId      String
+  workspaceId String?
+  feature     String
+  title       String
+  body        String
+  metadata    String   @default("{}")
+  status      String   @default("draft")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([workspaceId, createdAt])
+}
+
+model AgentConversation {
+  id        String         @id @default(cuid())
+  userId    String
+  title     String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  messages  AgentMessage[]
+}
+
+model AgentMessage {
+  id             String            @id @default(cuid())
+  conversationId String
+  role           String
+  content        String
+  createdAt      DateTime          @default(now())
+  conversation   AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model BrandVoiceProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  brandName       String
+  industry        String?
+  targetAudience  String
+  writingStyle    String
+  trainingSamples String?
+  profileData     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model PromptUseLog {
+  id         String   @id @default(cuid())
+  userId     String
+  promptId   String?
+  promptText String?
+  feature    String?
+  createdAt  DateTime @default(now())
+}
+
+model SavedAgentPrompt {
+  id        String   @id @default(cuid())
+  userId    String
+  prompt    String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, prompt])
+}
+
 model MarketingEmployeeRun {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   userId        String
   goal          String
-  status        String   @default("active")
-  messages      String   @default("[]")
+  status        String    @default("active")
+  mode          String    @default("guided")
+  autoRunStatus String?
+  messages      String    @default("[]")
   steps         String
   currentStepId String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  publishedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId, updatedAt])
+}
+
+model StripeWebhookEvent {
+  id        String   @id @default(cuid())
+  eventId   String   @unique
+  type      String
+  createdAt DateTime @default(now())
+}
+
+/// OAuth-backed third-party integrations (LinkedIn, WordPress, Notion, Google Docs, …)
+model IntegrationConnection {
+  id                    String    @id @default(cuid())
+  userId                String
+  provider              String
+  status                String    @default("disconnected")
+  accountId             String?
+  accountLabel          String?
+  accountEmail          String?
+  profileImage          String?
+  encryptedAccessToken  String?
+  encryptedRefreshToken String?
+  tokenExpiresAt        DateTime?
+  scopes                String    @default("[]")
+  metadata              String    @default("{}")
+  lastSyncAt            DateTime?
+  lastSyncStatus        String?
+  lastSyncError         String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([userId, provider])
+  @@index([userId])
+}
+
+model IntegrationPublishLog {
+  id           String   @id @default(cuid())
+  userId       String
+  provider     String
+  title        String
+  status       String
+  externalId   String?
+  externalUrl  String?
+  errorMessage String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId, provider])
+}
+
+/// End-to-end content attribution: generated → published → engagement
+model ContentAttribution {
+  id                 String    @id @default(cuid())
+  userId             String
+  workspaceId        String?
+  generatedContentId String?
+  feature            String
+  title              String
+  topic              String?
+  hook               String?
+  cta                String?
+  platform           String?
+  status             String    @default("generated")
+  impressions        Int       @default(0)
+  views              Int       @default(0)
+  engagements        Int       @default(0)
+  clicks             Int       @default(0)
+  shares             Int       @default(0)
+  comments           Int       @default(0)
+  performanceScore   Int       @default(0)
+  publishedAt        DateTime?
+  generatedAt        DateTime  @default(now())
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, topic])
+}
+
+model AttributionInsight {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  headline    String
+  body        String
+  highlights  String   @default("[]")
+  generatedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

@@ -53,7 +53,7 @@ export interface LinkedInPostOutput {
   engagementScore: number;
 }
 
-function scoreHook(hook: string): number {
+export function scoreHook(hook: string): number {
   let score = 62;
   if (hook.length >= 40 && hook.length <= 120) score += 12;
   if (/[?]/.test(hook)) score += 8;
@@ -62,7 +62,7 @@ function scoreHook(hook: string): number {
   return Math.min(98, score);
 }
 
-function scoreEngagement(hook: string, main: string, cta: string): number {
+export function scoreEngagement(hook: string, main: string, cta: string): number {
   let score = 58;
   const lines = main.split("\n").filter(Boolean).length;
   if (lines >= 4 && lines <= 12) score += 14;

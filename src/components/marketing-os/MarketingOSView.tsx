@@ -137,7 +137,7 @@ export function MarketingOSView() {
 
   function handleExport() {
     if (!system) return;
-    exportToPDF(system.title, formatMarketingOSForExport(system));
+    void exportToPDF(system.title, formatMarketingOSForExport(system));
     showToast("PDF exported");
   }
 

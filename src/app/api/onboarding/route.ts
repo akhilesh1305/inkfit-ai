@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { gateCredits, chargeAfterGate } from "@/lib/credit-api";
 import { generate, hasGeminiKey, hasOpenAIKey } from "@/lib/ai";
 import { getKnowledgeContextForUser } from "@/lib/knowledge-context";
+import { upsertBrandKitForUser } from "@/lib/persistence";
 import {
   DEFAULT_ONBOARDING_FORM,
   generateOnboardingProfile,
@@ -104,12 +106,7 @@ async function syncBrandKit(
     industry: form.industry || null,
   };
 
-  const existing = await prisma.brandKit.findFirst();
-  if (existing) {
-    await prisma.brandKit.update({ where: { id: existing.id }, data });
-  } else {
-    await prisma.brandKit.create({ data });
-  }
+  await upsertBrandKitForUser(userId, data);
 
   await prisma.personalBrandProfile.upsert({
     where: { userId },
@@ -173,6 +170,44 @@ export async function POST(req: Request) {
 
     const body = await req.json();
 
+    if (body.action === "quick_complete") {
+      const goal = String(body.goal ?? "").trim();
+      const businessName = String(body.businessName ?? "My Business").trim();
+      if (!goal) {
+        return NextResponse.json({ error: "Goal is required" }, { status: 400 });
+      }
+
+      await prisma.onboardingProfile.upsert({
+        where: { userId: session.id },
+        create: {
+          userId: session.id,
+          completed: true,
+          businessName,
+          goals: goal,
+          industry: "General",
+          brandVoice: "professional",
+        },
+        update: {
+          completed: true,
+          businessName,
+          goals: goal,
+        },
+      });
+
+      await upsertBrandKitForUser(session.id, {
+        companyName: businessName,
+        primaryColor: "#7C3AED",
+        secondaryColor: "#06B6D4",
+        accentColor: "#A78BFA",
+        targetAudience: goal,
+        writingStyle: "professional",
+        tone: "Professional",
+        industry: null,
+      });
+
+      return NextResponse.json({ completed: true });
+    }
+
     if (body.action === "save") {
       const form = body.form as OnboardingFormData;
       await prisma.onboardingProfile.upsert({
@@ -205,6 +240,9 @@ export async function POST(req: Request) {
     }
 
     if (body.action === "complete") {
+      const gate = await gateCredits("marketing_plan");
+      if (!gate.ok) return gate.response;
+
       const form = body.form as OnboardingFormData;
       const base = generateOnboardingProfile(form);
       const kb = await getKnowledgeContextForUser(session.id);
@@ -243,6 +281,7 @@ export async function POST(req: Request) {
 
       await syncBrandKit(session.id, form, generated);
 
+      await chargeAfterGate(gate, "marketing_plan");
       return NextResponse.json({ completed: true, generated });
     }
 

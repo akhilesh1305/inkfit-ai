@@ -94,7 +94,7 @@ export default function BlogPage() {
                 <button type="button" onClick={() => exportToWord(title, result)} className="btn-secondary py-1.5 text-xs">
                   <FileDown className="h-3 w-3" /> Word
                 </button>
-                <button type="button" onClick={() => exportToPDF(title, result)} className="btn-secondary py-1.5 text-xs">
+                <button type="button" onClick={() => void exportToPDF(title, result)} className="btn-secondary py-1.5 text-xs">
                   <FileDown className="h-3 w-3" /> PDF
                 </button>
               </div>

@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { generateSocialPosts } from "@/lib/ai";
-import { gateCredits } from "@/lib/credit-api";
-import { prisma } from "@/lib/prisma";
+import { gateCredits, chargeAfterGate } from "@/lib/credit-api";
+import { getBrandKitForUser } from "@/lib/persistence";
 import type { BrandKit } from "@/lib/brand";
 
-async function getBrand(): Promise<BrandKit | undefined> {
-  const brand = await prisma.brandKit.findFirst({ orderBy: { updatedAt: "desc" } });
-  if (!brand) return undefined;
+function mapBrand(brand: NonNullable<Awaited<ReturnType<typeof getBrandKitForUser>>>): BrandKit {
   return {
     companyName: brand.companyName,
     primaryColor: brand.primaryColor,
@@ -25,8 +23,10 @@ export async function POST(req: Request) {
     if (!gate.ok) return gate.response;
 
     const body = await req.json();
-    const brand = await getBrand();
+    const brandRow = await getBrandKitForUser(gate.userId);
+    const brand = brandRow ? mapBrand(brandRow) : undefined;
     const content = await generateSocialPosts({ ...body, brand });
+    await chargeAfterGate(gate, "content_generation");
     return NextResponse.json({ content });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

@@ -1,79 +1,53 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { gateAuth } from "@/lib/credit-api";
+import { loadCalendarPlan, syncCalendarPlan } from "@/lib/persistence";
 import { getDemoCalendarEvents } from "@/lib/ai";
 
 export async function GET() {
   try {
-    const events = await prisma.calendarEvent.findMany({ orderBy: { date: "asc" } });
-    if (events.length === 0) {
-      const demo = getDemoCalendarEvents();
-      for (const e of demo) {
-        await prisma.calendarEvent.create({
-          data: { title: e.title, type: e.type, date: e.date, status: e.status, platform: e.platform },
-        });
-      }
-      const seeded = await prisma.calendarEvent.findMany({ orderBy: { date: "asc" } });
-      return NextResponse.json({
-        events: seeded.map((e) => ({ id: e.id, title: e.title, type: e.type, date: e.date, status: e.status, platform: e.platform ?? undefined })),
-      });
+    const auth = await gateAuth("content:read");
+    if (!auth.ok) return auth.response;
+
+    const items = await loadCalendarPlan(auth.ctx.user.id);
+    if (items.length > 0) {
+      return NextResponse.json({ items });
     }
+
+    const demo = getDemoCalendarEvents();
     return NextResponse.json({
-      events: events.map((e) => ({ id: e.id, title: e.title, type: e.type, date: e.date, status: e.status, platform: e.platform ?? undefined })),
+      items: demo.map((e) => ({
+        id: e.id,
+        topic: e.title,
+        date: e.date,
+        contentType: e.type,
+        platformId: e.platform?.toLowerCase(),
+        status: e.status,
+      })),
     });
   } catch (e) {
-    return NextResponse.json({ events: getDemoCalendarEvents() });
+    return NextResponse.json({ items: [], error: String(e) });
   }
 }
 
 export async function POST(req: Request) {
   try {
+    const auth = await gateAuth("content:write");
+    if (!auth.ok) return auth.response;
+
     const body = await req.json();
 
     if (body.action === "plan" && Array.isArray(body.items)) {
-      await prisma.calendarEvent.deleteMany();
-      for (const item of body.items) {
-        await prisma.calendarEvent.create({
-          data: {
-            id: item.id,
-            title: item.topic,
-            type: mapContentType(item.contentType),
-            date: item.date,
-            status: mapStatus(item.status),
-            platform: item.platformId,
-          },
-        });
-      }
+      await syncCalendarPlan(auth.ctx.user.id, body.items);
       return NextResponse.json({ ok: true });
     }
 
-    const { events } = body;
-    await prisma.calendarEvent.deleteMany();
-    for (const e of events) {
-      await prisma.calendarEvent.create({
-        data: { id: e.id, title: e.title, type: e.type, date: e.date, status: e.status, platform: e.platform, content: e.content },
-      });
+    if (Array.isArray(body.items)) {
+      await syncCalendarPlan(auth.ctx.user.id, body.items);
+      return NextResponse.json({ ok: true });
     }
-    return NextResponse.json({ ok: true });
+
+    return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
-}
-
-function mapContentType(contentType: string): string {
-  const map: Record<string, string> = {
-    blog: "blog",
-    carousel: "carousel",
-    thread: "social",
-    reel: "image",
-    "thought-leadership": "linkedin",
-    educational: "linkedin",
-    story: "social",
-    "case-study": "blog",
-  };
-  return map[contentType] ?? "social";
-}
-
-function mapStatus(status: string): string {
-  if (status === "in-progress") return "scheduled";
-  return status;
 }

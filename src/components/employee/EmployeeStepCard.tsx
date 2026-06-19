@@ -41,7 +41,9 @@ export function EmployeeStepCard({
   busy,
 }: EmployeeStepCardProps) {
   const [expanded, setExpanded] = useState(
-    step.status === "awaiting_approval" || step.status === "running"
+    step.status === "awaiting_approval" ||
+      step.status === "pending_review" ||
+      step.status === "running"
   );
   const meta = getStepMeta(step.id);
 
@@ -49,6 +51,7 @@ export function EmployeeStepCard({
     pending: "text-content-subtle",
     running: "text-brand-400",
     awaiting_approval: "text-amber-400",
+    pending_review: "text-cyan-400",
     approved: "text-emerald-400",
     rejected: "text-red-400",
     completed: "text-emerald-400",
@@ -60,7 +63,9 @@ export function EmployeeStepCard({
         "rounded-xl border transition",
         step.status === "awaiting_approval"
           ? "border-amber-500/30 bg-amber-500/[0.04]"
-          : step.status === "approved"
+          : step.status === "pending_review"
+            ? "border-cyan-500/30 bg-cyan-500/[0.04]"
+            : step.status === "approved"
             ? "border-emerald-500/20 bg-emerald-500/[0.03]"
             : step.status === "running"
               ? "border-brand-500/30 bg-brand-500/[0.04]"
@@ -89,7 +94,11 @@ export function EmployeeStepCard({
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-white">{step.title}</p>
           <p className={cn("text-[11px] capitalize", statusColor)}>
-            {step.status === "awaiting_approval" ? "Ready for review" : step.status.replace(/_/g, " ")}
+            {step.status === "awaiting_approval"
+              ? "Ready for review"
+              : step.status === "pending_review"
+                ? "Generated — pending approval"
+                : step.status.replace(/_/g, " ")}
           </p>
         </div>
         {expanded ? (
@@ -109,7 +118,7 @@ export function EmployeeStepCard({
             <StepOutput stepId={step.id} output={step.output} />
           ) : null}
 
-          {step.status === "awaiting_approval" && (
+          {(step.status === "awaiting_approval" || step.status === "pending_review") && (
             <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="button"
@@ -229,6 +238,9 @@ function StepOutput({ stepId, output }: { stepId: EmployeeStepId; output: unknow
           {items.map((item) => (
             <div key={item.id} className="flex gap-2 rounded bg-black/20 px-2 py-1.5 text-[10px]">
               <span className="shrink-0 text-content-subtle">{item.date}</span>
+              {item.suggestedTime && (
+                <span className="shrink-0 text-cyan-400">{item.suggestedTime}</span>
+              )}
               <span className="text-white truncate">{item.topic}</span>
             </div>
           ))}

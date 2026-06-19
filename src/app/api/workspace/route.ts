@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requirePermission } from "@/lib/auth-guard";
 import { getActiveWorkspaceIdForUser } from "@/lib/workspace-context";
 import {
   DEMO_CONTENT,
@@ -136,6 +137,14 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
+
+    if (body.action === "delete") {
+      const auth = await requirePermission("content:delete", workspaceId);
+      if (!auth.ok) return auth.response;
+    } else {
+      const auth = await requirePermission("content:write", workspaceId);
+      if (!auth.ok) return auth.response;
+    }
 
     if (body.action === "create") {
       const item = await prisma.workspaceContent.create({

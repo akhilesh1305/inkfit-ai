@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
-import { generateDemoContent } from "@/lib/ai";
 import { DEMO_OUTPUTS, detectOutputType, type DemoOutputType } from "@/lib/demo-content";
 
+/**
+ * Public landing-page demo — static samples only.
+ * Never calls live AI providers (prevents unauthenticated COGS leak).
+ */
 export async function POST(req: Request) {
   try {
     const { prompt, type: typeHint } = await req.json();
@@ -10,17 +13,7 @@ export async function POST(req: Request) {
     }
 
     const type = (typeHint as DemoOutputType) || detectOutputType(prompt);
-    const meta = DEMO_OUTPUTS[type];
-    const result = await generateDemoContent(prompt, type);
-
-    if (result.live) {
-      return NextResponse.json({
-        type,
-        label: meta.label,
-        content: result.content,
-        live: true,
-      });
-    }
+    const meta = DEMO_OUTPUTS[type] ?? DEMO_OUTPUTS.linkedin;
 
     return NextResponse.json({
       type,

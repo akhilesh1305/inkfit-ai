@@ -16,12 +16,36 @@ export interface BillingUsage {
   warningLevel?: "none" | "approaching" | "critical" | "depleted";
 }
 
+export interface BillingHistoryItem {
+  id: string;
+  date: string;
+  event: string;
+  plan: string;
+  amount?: number;
+}
+
 export interface BillingSubscription {
   planId: string;
   status: "active" | "canceled" | "past_due" | "trialing";
+  billingType?: "individual" | "team" | "agency";
+  seatLimit?: number;
+  seatsUsed?: number;
+  clientLimit?: number | "unlimited";
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
   currentPeriodEnd?: string;
+  stripeEnabled?: boolean;
+}
+
+export interface TeamBillingInfo {
+  billingType: string;
+  seatLimit: number;
+  seatsUsed: number;
+  seatsAvailable: number;
+  clientLimit: number | "unlimited";
+  clientsUsed: number;
+  clientsAvailable: number | "unlimited";
+  isBillingOwner: boolean;
 }
 
 export interface BillingInvoice {
@@ -36,20 +60,13 @@ export interface BillingInvoice {
   pdfUrl?: string;
 }
 
-export interface BillingHistoryItem {
-  id: string;
-  date: string;
-  event: string;
-  plan: string;
-  amount?: number;
-}
-
 export interface BillingSummary {
   subscription: BillingSubscription;
   usage: BillingUsage;
   invoices: BillingInvoice[];
   billingHistory: BillingHistoryItem[];
   currentPlan: SubscriptionPlan;
+  teamBilling?: TeamBillingInfo;
 }
 
 export function getPlanById(planId: string): SubscriptionPlan {
@@ -82,6 +99,12 @@ export const STRIPE_PRICE_IDS: Record<string, string> = {
   pro: process.env.STRIPE_PRICE_PRO ?? "price_pro_monthly",
   agency: process.env.STRIPE_PRICE_AGENCY ?? "price_agency_monthly",
 };
+
+export const CREDIT_PACK = {
+  credits: 500,
+  priceInr: 199,
+  stripePriceId: process.env.STRIPE_PRICE_CREDIT_PACK ?? "price_credit_pack_500",
+} as const;
 
 export const DEMO_USAGE_BREAKDOWN: UsageBreakdown[] = [
   { label: "LinkedIn", count: 34, color: "#3B82F6" },

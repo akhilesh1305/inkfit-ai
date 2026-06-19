@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { CreditCard, Loader2, CheckCircle } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
@@ -8,14 +8,19 @@ import { CurrentPlanCard } from "@/components/billing/CurrentPlanCard";
 import { UsageMeters } from "@/components/billing/UsageMeters";
 import { PricingCards } from "@/components/billing/PricingCards";
 import { BillingTables } from "@/components/billing/BillingTables";
+import { TeamBillingPanel } from "@/components/billing/TeamBillingPanel";
+import { ManageSubscriptionButton } from "@/components/billing/ManageSubscriptionButton";
 import type { BillingSummary } from "@/lib/billing";
+import { CREDIT_PACK } from "@/lib/billing";
 
 export default function BillingPageContent() {
   const [data, setData] = useState<BillingSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [upgrading, setUpgrading] = useState<string | null>(null);
+  const [buyingCredits, setBuyingCredits] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const searchParams = useSearchParams();
+  const upgradeStarted = useRef(false);
 
   const loadBilling = useCallback(async () => {
     const res = await fetch("/api/billing");
@@ -29,8 +34,23 @@ export default function BillingPageContent() {
     loadBilling();
     if (searchParams.get("success")) {
       setToast("Payment successful! Your plan has been updated.");
+      void fetch("/api/auth/refresh", { method: "POST" }).then(() => loadBilling());
+    }
+    if (searchParams.get("credits")) {
+      setToast(`+${CREDIT_PACK.credits} bonus credits added to your account.`);
+      void loadBilling();
     }
   }, [loadBilling, searchParams]);
+
+  useEffect(() => {
+    const upgradePlan = searchParams.get("upgrade");
+    if (!upgradePlan || !data || upgrading || upgradeStarted.current) return;
+    if (!["creator", "pro", "agency"].includes(upgradePlan)) return;
+    if (data.currentPlan.id === upgradePlan) return;
+    upgradeStarted.current = true;
+    void handleUpgrade(upgradePlan);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, searchParams, upgrading]);
 
   async function handleUpgrade(planId: string) {
     if (planId === "free") {
@@ -70,6 +90,33 @@ export default function BillingPageContent() {
     setUpgrading(null);
   }
 
+  async function handleBuyCredits() {
+    setBuyingCredits(true);
+    const res = await fetch("/api/billing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "buy_credits" }),
+    });
+    const result = await res.json();
+
+    if (result.checkoutUrl) {
+      window.location.href = result.checkoutUrl;
+      return;
+    }
+
+    if (result.success) {
+      setToast(
+        result.mode === "demo"
+          ? `Added ${result.credits} bonus credits (demo mode).`
+          : `Added ${result.credits} bonus credits.`
+      );
+      await loadBilling();
+    } else if (result.error) {
+      setToast(result.error);
+    }
+    setBuyingCredits(false);
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
@@ -96,7 +143,14 @@ export default function BillingPageContent() {
           </span>
         }
         description="Manage your plan, track usage, and view invoices."
-      />
+      >
+        {data.subscription.stripeEnabled && (
+          <ManageSubscriptionButton
+            stripeCustomerId={data.subscription.stripeCustomerId}
+            stripeEnabled={data.subscription.stripeEnabled}
+          />
+        )}
+      </PageHeader>
 
       {toast && (
         <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
@@ -137,6 +191,18 @@ export default function BillingPageContent() {
               Stripe Customer: {data.subscription.stripeCustomerId}
             </p>
           )}
+          {data.usage.creditsRemaining !== "unlimited" && (
+            <button
+              type="button"
+              onClick={() => void handleBuyCredits()}
+              disabled={buyingCredits}
+              className="btn-secondary mt-4 w-full text-sm"
+            >
+              {buyingCredits
+                ? "Starting checkout…"
+                : `Buy ${CREDIT_PACK.credits} credits — ₹${CREDIT_PACK.priceInr}`}
+            </button>
+          )}
         </div>
       </div>
 
@@ -144,7 +210,10 @@ export default function BillingPageContent() {
         currentPlanId={data.subscription.planId}
         onUpgrade={handleUpgrade}
         upgrading={upgrading}
+        stripeEnabled={data.subscription.stripeEnabled}
       />
+
+      {data.teamBilling && <TeamBillingPanel team={data.teamBilling} />}
 
       <BillingTables invoices={data.invoices} billingHistory={data.billingHistory} />
     </div>

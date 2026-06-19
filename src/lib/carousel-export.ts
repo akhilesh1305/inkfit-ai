@@ -1,4 +1,3 @@
-import { jsPDF } from "jspdf";
 import type { CarouselData, CarouselSlide } from "@/lib/carousel-content";
 
 const SIZE = 1080;
@@ -125,7 +124,8 @@ export function downloadAllSlidesPng(data: CarouselData) {
   });
 }
 
-export function downloadCarouselPdf(data: CarouselData) {
+export async function downloadCarouselPdf(data: CarouselData) {
+  const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ orientation: "portrait", unit: "px", format: [SIZE, SIZE] });
 
   data.slides.forEach((slide, i) => {

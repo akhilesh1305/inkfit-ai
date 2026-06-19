@@ -1,12 +1,13 @@
 import { addDays, format } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { generateBlog, generateImage, generateLinkedInCarousel } from "@/lib/ai";
+import { generateLinkedInPostAI, generateSEOArticleAI } from "@/lib/ai/generations";
 import { getPlanById } from "@/lib/billing";
+import { resolveBillingContext } from "@/lib/billing-service";
 import { requireCredits } from "@/lib/credit-service";
 import type { CreditActionType } from "@/lib/credits";
 import { getKnowledgeContextForUser } from "@/lib/knowledge-context";
-import { generateLinkedInPost, type LinkedInContentType } from "@/lib/linkedin-content";
-import { generateSEOArticle } from "@/lib/seo-content";
+import type { LinkedInContentType } from "@/lib/linkedin-content";
 import type { BrandKit } from "@/lib/brand";
 import {
   getExecutionOrder,
@@ -32,28 +33,15 @@ export interface WorkflowContext {
   scheduledPostId?: string;
 }
 
-async function getBrand(): Promise<BrandKit | undefined> {
-  const brand = await prisma.brandKit.findFirst({ orderBy: { updatedAt: "desc" } });
-  if (!brand) return undefined;
-  return {
-    companyName: brand.companyName,
-    primaryColor: brand.primaryColor,
-    secondaryColor: brand.secondaryColor,
-    accentColor: brand.accentColor,
-    targetAudience: brand.targetAudience,
-    writingStyle: brand.writingStyle,
-    tone: brand.tone,
-    industry: brand.industry ?? undefined,
-  };
-}
+import { getBrandKitForUser } from "@/lib/persistence";
 
 async function gateStep(
-  userId: string,
+  billingUserId: string,
   planId: string,
   action: CreditActionType
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const plan = getPlanById(planId);
-  const result = await requireCredits(userId, planId, plan.name, action);
+  const result = await requireCredits(billingUserId, planId, plan.name, action);
   if (!result.ok) {
     return { ok: false, error: result.error ?? "Insufficient credits" };
   }
@@ -69,17 +57,30 @@ async function executeNode(
   node: WorkflowNode,
   ctx: WorkflowContext,
   userId: string,
+  billingUserId: string,
   planId: string,
   knowledgeContext?: string
 ): Promise<{ output: string; preview: string }> {
-  const brand = await getBrand();
+  const brandRow = await getBrandKitForUser(userId);
+  const brand: BrandKit | undefined = brandRow
+    ? {
+        companyName: brandRow.companyName,
+        primaryColor: brandRow.primaryColor,
+        secondaryColor: brandRow.secondaryColor,
+        accentColor: brandRow.accentColor,
+        targetAudience: brandRow.targetAudience,
+        writingStyle: brandRow.writingStyle,
+        tone: brandRow.tone,
+        industry: brandRow.industry ?? undefined,
+      }
+    : undefined;
   const meta = WORKFLOW_NODE_META[node.type];
   const topic = node.config.topic || ctx.topic;
   const audience = ctx.audience || brand?.targetAudience || "professionals";
 
   switch (node.type) {
     case "blog_generator": {
-      const gate = await gateStep(userId, planId, "content_generation");
+      const gate = await gateStep(billingUserId, planId, "content_generation");
       if (!gate.ok) throw new Error(gate.error);
 
       const content = await generateBlog({
@@ -89,17 +90,17 @@ async function executeNode(
         audience,
         brand,
         knowledgeContext,
-      });
+      }, userId);
       ctx.blog = content;
       return { output: content, preview: truncate(content) };
     }
 
     case "seo_writer": {
-      const gate = await gateStep(userId, planId, "seo_article");
+      const gate = await gateStep(billingUserId, planId, "seo_article");
       if (!gate.ok) throw new Error(gate.error);
 
       const keyword = node.config.targetKeyword || ctx.targetKeyword || topic;
-      const article = generateSEOArticle({ topic, targetKeyword: keyword, audience });
+      const article = await generateSEOArticleAI({ topic, targetKeyword: keyword, audience }, { userId });
       const full = article.fullArticle;
       ctx.seoArticle = full;
       ctx.targetKeyword = keyword;
@@ -110,16 +111,16 @@ async function executeNode(
     }
 
     case "linkedin_generator": {
-      const gate = await gateStep(userId, planId, "content_generation");
+      const gate = await gateStep(billingUserId, planId, "content_generation");
       if (!gate.ok) throw new Error(gate.error);
 
       const sourceTopic = ctx.blog ? truncate(ctx.blog, 120) : topic;
-      const post = generateLinkedInPost({
+      const post = await generateLinkedInPostAI({
         topic: sourceTopic,
         targetAudience: audience,
         contentType:
           (node.config.contentType as LinkedInContentType) ?? "thought-leadership",
-      });
+      }, { userId });
       const full = `${post.hook}\n\n${post.mainContent}\n\n${post.cta}`;
       ctx.linkedin = full;
       return {
@@ -129,20 +130,20 @@ async function executeNode(
     }
 
     case "carousel_generator": {
-      const gate = await gateStep(userId, planId, "content_generation");
+      const gate = await gateStep(billingUserId, planId, "content_generation");
       if (!gate.ok) throw new Error(gate.error);
 
       const content = await generateLinkedInCarousel({
         topic: ctx.blog ? truncate(ctx.blog, 80) : topic,
         slides: node.config.slides ?? 7,
         brand,
-      });
+      }, userId);
       ctx.carousel = content;
       return { output: content, preview: truncate(content) };
     }
 
     case "image_studio": {
-      const gate = await gateStep(userId, planId, "ai_image");
+      const gate = await gateStep(billingUserId, planId, "ai_image");
       if (!gate.ok) throw new Error(gate.error);
 
       const prompt =
@@ -161,7 +162,7 @@ async function executeNode(
         styleId,
         size: aspectRatio === "16:9" ? "1792x1024" : "1024x1024",
         aspectRatio,
-      });
+      }, userId);
 
       ctx.imageUrl = result.url;
       ctx.imagePrompt = prompt;
@@ -196,6 +197,7 @@ async function executeNode(
 
       const event = await prisma.calendarEvent.create({
         data: {
+          userId,
           title: truncate(title, 80),
           type: "linkedin",
           date: eventDate,
@@ -241,10 +243,14 @@ async function executeNode(
 
 export async function runWorkflow(
   userId: string,
-  planId: string,
+  _planId: string,
   graph: WorkflowGraph,
   runId: string
 ): Promise<WorkflowRunResult> {
+  const billing = await resolveBillingContext(userId);
+  const billingUserId = billing.billingUserId;
+  const planId = billing.planId;
+
   const order = getExecutionOrder(graph.nodes, graph.edges);
   const knowledgeContext = await getKnowledgeContextForUser(userId);
 
@@ -281,6 +287,7 @@ export async function runWorkflow(
         node,
         ctx,
         userId,
+        billingUserId,
         planId,
         knowledgeContext
       );

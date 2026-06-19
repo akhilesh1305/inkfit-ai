@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { gateAuth } from "@/lib/credit-api";
 import { prisma } from "@/lib/prisma";
 import { EXTENSION_PROTOCOL_VERSION } from "@/lib/extension-protocol";
 import {
@@ -117,18 +117,17 @@ function mapDashboard(
 
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:read");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
 
-    await seedUser(session.id);
+    await seedUser(userId);
 
     const [settings, integrations, websites] = await Promise.all([
-      prisma.extensionSettings.findUniqueOrThrow({ where: { userId: session.id } }),
-      prisma.extensionIntegration.findMany({ where: { userId: session.id } }),
+      prisma.extensionSettings.findUniqueOrThrow({ where: { userId } }),
+      prisma.extensionIntegration.findMany({ where: { userId } }),
       prisma.extensionWebsite.findMany({
-        where: { userId: session.id },
+        where: { userId },
         orderBy: { updatedAt: "desc" },
       }),
     ]);
@@ -148,20 +147,19 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await gateAuth("content:write");
+    if (!auth.ok) return auth.response;
+    const userId = auth.ctx.user.id;
 
     const body = await req.json();
-    await seedUser(session.id);
+    await seedUser(userId);
 
     if (body.action === "toggle-integration") {
       const platform = String(body.platform) as IntegrationPlatform;
       const connected = !!body.connected;
 
       await prisma.extensionIntegration.updateMany({
-        where: { userId: session.id, platform },
+        where: { userId: userId, platform },
         data: {
           connected,
           account: connected ? body.account ?? `user@${platform}.com` : null,
@@ -179,9 +177,9 @@ export async function POST(req: Request) {
       }
 
       await prisma.extensionWebsite.upsert({
-        where: { userId_domain: { userId: session.id, domain } },
+        where: { userId_domain: { userId: userId, domain } },
         create: {
-          userId: session.id,
+          userId: userId,
           domain,
           label: body.label?.trim() || domain,
           status: "active",
@@ -199,7 +197,7 @@ export async function POST(req: Request) {
 
     if (body.action === "remove-website") {
       await prisma.extensionWebsite.deleteMany({
-        where: { id: body.id, userId: session.id },
+        where: { id: body.id, userId: userId },
       });
       return NextResponse.json({ ok: true });
     }
@@ -207,7 +205,7 @@ export async function POST(req: Request) {
     if (body.action === "toggle-website") {
       const status = body.status === "active" ? "active" : "paused";
       await prisma.extensionWebsite.updateMany({
-        where: { id: body.id, userId: session.id },
+        where: { id: body.id, userId: userId },
         data: { status },
       });
       return NextResponse.json({ ok: true });
@@ -217,9 +215,9 @@ export async function POST(req: Request) {
     if (body.action === "extension-ping") {
       const version = String(body.version ?? LATEST_EXTENSION_VERSION);
       await prisma.extensionSettings.upsert({
-        where: { userId: session.id },
+        where: { userId: userId },
         create: {
-          userId: session.id,
+          userId: userId,
           installed: true,
           version,
           lastSeenAt: new Date(),
@@ -239,9 +237,9 @@ export async function POST(req: Request) {
 
     if (body.action === "mark-installed") {
       await prisma.extensionSettings.upsert({
-        where: { userId: session.id },
+        where: { userId: userId },
         create: {
-          userId: session.id,
+          userId: userId,
           installed: true,
           version: LATEST_EXTENSION_VERSION,
           lastSeenAt: new Date(),

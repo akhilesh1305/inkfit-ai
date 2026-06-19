@@ -14,11 +14,14 @@ export type EmployeeStepStatus =
   | "pending"
   | "running"
   | "awaiting_approval"
+  | "pending_review"
   | "approved"
   | "rejected"
   | "completed";
 
-export type EmployeeRunStatus = "active" | "completed" | "paused";
+export type EmployeeRunStatus = "active" | "review" | "completed" | "paused";
+export type EmployeeRunMode = "guided" | "autonomous";
+export type EmployeeAutoRunStatus = "running" | "done";
 
 export interface EmployeeStepMeta {
   id: EmployeeStepId;
@@ -52,10 +55,14 @@ export interface EmployeeRun {
   id: string;
   goal: string;
   status: EmployeeRunStatus;
+  mode: EmployeeRunMode;
+  autoRunStatus: EmployeeAutoRunStatus | null;
   messages: EmployeeMessage[];
   steps: EmployeeStep[];
   currentStepId: EmployeeStepId | null;
   progress: number;
+  generationProgress: number;
+  publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -70,8 +77,8 @@ export const EMPLOYEE_STEPS: EmployeeStepMeta[] = [
   },
   {
     id: "content_plan",
-    title: "Content Plan",
-    description: "4-week themes, formats & distribution",
+    title: "Content Pillars",
+    description: "Themes, formats & distribution focus",
     icon: "▤",
     gradient: "from-cyan-600 to-blue-700",
   },
@@ -84,8 +91,8 @@ export const EMPLOYEE_STEPS: EmployeeStepMeta[] = [
   },
   {
     id: "linkedin_posts",
-    title: "LinkedIn Posts",
-    description: "Ready-to-publish thought leadership",
+    title: "Social Posts",
+    description: "Ready-to-publish LinkedIn content",
     icon: "in",
     gradient: "from-[#0A66C2] to-blue-900",
   },
@@ -98,8 +105,8 @@ export const EMPLOYEE_STEPS: EmployeeStepMeta[] = [
   },
   {
     id: "calendar",
-    title: "Content Calendar",
-    description: "14-day publishing schedule",
+    title: "Publishing Schedule",
+    description: "14-day calendar with optimal post times",
     icon: "📅",
     gradient: "from-emerald-600 to-teal-700",
   },
@@ -132,6 +139,31 @@ export function computeProgress(steps: EmployeeStep[]): number {
     (s) => s.status === "approved" || s.status === "completed"
   ).length;
   return Math.round((done / steps.length) * 100);
+}
+
+export function computeGenerationProgress(steps: EmployeeStep[]): number {
+  if (steps.length === 0) return 0;
+  const generated = steps.filter(
+    (s) =>
+      s.status === "awaiting_approval" ||
+      s.status === "pending_review" ||
+      s.status === "approved" ||
+      s.status === "completed" ||
+      s.status === "rejected"
+  ).length;
+  return Math.round((generated / steps.length) * 100);
+}
+
+export function getStepsAwaitingReview(steps: EmployeeStep[]): EmployeeStep[] {
+  return steps.filter(
+    (s) => s.status === "awaiting_approval" || s.status === "pending_review"
+  );
+}
+
+export function allStepsReviewed(steps: EmployeeStep[]): boolean {
+  return steps.every(
+    (s) => s.status === "approved" || s.status === "rejected"
+  );
 }
 
 export function getNextPendingStep(steps: EmployeeStep[]): EmployeeStep | null {
@@ -324,13 +356,19 @@ export function executeEmployeeStep(
   }
 }
 
-export function employeeIntroMessage(goal: string): string {
-  return `Got it — your goal is **"${goal}"**. I'm your AI Marketing Manager. I'll build your strategy, content plan, blog ideas, LinkedIn posts, images, and calendar — one step at a time. Review each deliverable and approve to keep me moving. Let's start with your marketing strategy.`;
+export function employeeIntroMessage(goal: string, mode: EmployeeRunMode = "guided"): string {
+  if (mode === "autonomous") {
+    return `Mission accepted — **"${goal}"**. I'm running in **autonomous mode**: I'll build your full marketing package (strategy → pillars → posts → images → publishing schedule) without stopping. You'll review everything when I'm done.`;
+  }
+  return `Got it — your goal is **"${goal}"**. I'm your AI Marketing Manager. I'll build your strategy, content pillars, blog ideas, social posts, images, and publishing schedule — one step at a time. Review each deliverable and approve to keep me moving. Let's start with your marketing strategy.`;
 }
 
-export function employeeStepCompleteMessage(stepId: EmployeeStepId): string {
+export function employeeStepCompleteMessage(stepId: EmployeeStepId, mode: EmployeeRunMode = "guided"): string {
   const meta = getStepMeta(stepId);
   const next = EMPLOYEE_STEPS[EMPLOYEE_STEPS.findIndex((s) => s.id === stepId) + 1];
+  if (mode === "autonomous") {
+    return `**${meta.title}** generated. Moving to ${next ? `**${next.title}**` : "final review"}…`;
+  }
   if (!next) {
     return `**${meta.title}** is ready for your review. This is the final step — approve to complete your marketing package.`;
   }
@@ -346,4 +384,13 @@ export function employeeApprovedMessage(stepId: EmployeeStepId): string {
   return `**${meta.title}** approved. Working on **${next.title}** now…`;
 }
 
-export type CalendarPlanItemExport = CalendarPlanItem;
+export function employeeAutonomousCompleteMessage(): string {
+  return `**Autonomous run complete.** All 6 deliverables are ready for your review. Approve individual items, approve everything at once, or regenerate anything you'd like changed. When you're happy, publish to sync your calendar.`;
+}
+
+export interface PublishScheduleItem extends CalendarPlanItem {
+  suggestedTime?: string;
+  dayOfWeek?: string;
+}
+
+export type CalendarPlanItemExport = PublishScheduleItem;

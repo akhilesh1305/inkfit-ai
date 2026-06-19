@@ -30,9 +30,21 @@ export default function CarouselPage() {
     setLoading(true);
     setCarousel(null);
     setEditingId(null);
-    await new Promise((r) => setTimeout(r, 800));
-    const data = generateCarousel(topic.trim());
-    setCarousel(data);
+    try {
+      const res = await fetch("/api/carousel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: topic.trim() }),
+      });
+      const data = await res.json();
+      if (data.carousel) {
+        setCarousel(data.carousel);
+      } else {
+        setCarousel(generateCarousel(topic.trim()));
+      }
+    } catch {
+      setCarousel(generateCarousel(topic.trim()));
+    }
     setActiveIndex(0);
     setLoading(false);
   }
@@ -49,7 +61,7 @@ export default function CarouselPage() {
 
   function handleDownloadPdf() {
     if (!carousel) return;
-    downloadCarouselPdf(carousel);
+    void downloadCarouselPdf(carousel);
   }
 
   function handleDownloadPng() {

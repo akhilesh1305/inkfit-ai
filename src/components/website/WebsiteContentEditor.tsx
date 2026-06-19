@@ -110,7 +110,7 @@ export function WebsiteContentEditor({
   }
 
   function exportPdf() {
-    exportToPDF(
+    void exportToPDF(
       `${data.businessName} Website Content`,
       formatWebsiteForExport(data)
     );

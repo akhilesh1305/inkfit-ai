@@ -6,10 +6,10 @@ import type { PersonalBrandMetrics, PersonalBrandOutput } from "@/lib/personal-b
 import { getScoreLabel, METRIC_CONFIG } from "@/lib/personal-brand";
 import { AnimatedCounter } from "@/components/analytics/AnimatedCounter";
 import {
-  BrandMetricsRadar,
-  BrandScoreTrendChart,
-  BrandMetricBreakdownChart,
-} from "@/components/personal-brand/BrandAnalyticsCharts";
+  LazyBrandMetricsRadar,
+  LazyBrandScoreTrendChart,
+  LazyBrandMetricBreakdownChart,
+} from "@/components/charts/lazy-charts";
 import { cn } from "@/lib/utils";
 
 interface BrandScoreDashboardProps {
@@ -130,7 +130,7 @@ export function BrandScoreDashboard({ output }: BrandScoreDashboardProps) {
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-content-subtle">
             Score breakdown
           </p>
-          <BrandMetricsRadar metrics={metrics} />
+          <LazyBrandMetricsRadar metrics={metrics} />
         </div>
       </div>
 
@@ -139,11 +139,11 @@ export function BrandScoreDashboard({ output }: BrandScoreDashboardProps) {
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="card">
             <p className="mb-3 text-sm font-semibold text-white">8-week growth trend</p>
-            <BrandScoreTrendChart data={output.scoreHistory} />
+            <LazyBrandScoreTrendChart data={output.scoreHistory} />
           </div>
           <div className="card">
             <p className="mb-4 text-sm font-semibold text-white">Current metric levels</p>
-            <BrandMetricBreakdownChart data={output.scoreHistory} />
+            <LazyBrandMetricBreakdownChart data={output.scoreHistory} />
           </div>
         </div>
       )}

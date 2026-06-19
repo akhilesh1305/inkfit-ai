@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { requirePermission, requireWorkspaceMember } from "@/lib/auth-guard";
 import { prisma } from "@/lib/prisma";
 import {
   DEFAULT_PERSONAL_WORKSPACE,
@@ -14,6 +15,7 @@ import {
   mapWorkspace,
   setActiveWorkspaceForUser,
 } from "@/lib/workspace-context";
+import { getWorkspaceSettings, updateWorkspaceSettings } from "@/lib/persistence";
 
 async function seedWorkspaces(userId: string) {
   const count = await prisma.workspace.count({ where: { ownerId: userId } });
@@ -29,7 +31,7 @@ async function seedWorkspaces(userId: string) {
   });
 
   await prisma.workspaceMember.create({
-    data: { workspaceId: personal.id, userId, role: "owner" },
+    data: { workspaceId: personal.id, userId, role: "team_admin" },
   });
 
   const team = await prisma.workspace.create({
@@ -41,10 +43,13 @@ async function seedWorkspaces(userId: string) {
   });
 
   await prisma.workspaceMember.create({
-    data: { workspaceId: team.id, userId, role: "owner" },
+    data: { workspaceId: team.id, userId, role: "team_admin" },
   });
 
-  const client = await prisma.agencyClient.findFirst({ orderBy: { createdAt: "asc" } });
+  const client = await prisma.agencyClient.findFirst({
+    where: { userId },
+    orderBy: { createdAt: "asc" },
+  });
   const clientWs = await prisma.workspace.create({
     data: {
       ownerId: userId,
@@ -59,7 +64,7 @@ async function seedWorkspaces(userId: string) {
   });
 
   await prisma.workspaceMember.create({
-    data: { workspaceId: clientWs.id, userId, role: "owner" },
+    data: { workspaceId: clientWs.id, userId, role: "team_admin" },
   });
 
   await setActiveWorkspaceForUser(userId, personal.id);
@@ -83,7 +88,9 @@ async function buildWorkspaceList(userId: string) {
   const clientIds = rows.map((r) => r.clientId).filter(Boolean) as string[];
   const clients =
     clientIds.length > 0
-      ? await prisma.agencyClient.findMany({ where: { id: { in: clientIds } } })
+      ? await prisma.agencyClient.findMany({
+          where: { id: { in: clientIds }, userId },
+        })
       : [];
 
   const workspaces = await Promise.all(
@@ -106,14 +113,15 @@ export async function GET() {
 
     await seedWorkspaces(session.id);
 
-    const [workspaces, activeId] = await Promise.all([
+    const [workspaces, activeId, settings] = await Promise.all([
       buildWorkspaceList(session.id),
       getActiveWorkspaceIdForUser(session.id),
+      getWorkspaceSettings(session.id),
     ]);
 
     const active = workspaces.find((w) => w.id === activeId) ?? workspaces[0] ?? null;
 
-    return NextResponse.json({ workspaces, active });
+    return NextResponse.json({ workspaces, active, settings });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
@@ -129,6 +137,8 @@ export async function POST(req: Request) {
     const body = await req.json();
 
     if (body.action === "create") {
+      const perm = await requirePermission("workspace:manage");
+      if (!perm.ok) return perm.response;
       const name = String(body.name ?? "New Workspace").trim();
       const type = (body.type as WorkspaceType) ?? "personal";
       let slug = slugify(body.slug ?? name);
@@ -158,7 +168,7 @@ export async function POST(req: Request) {
       });
 
       await prisma.workspaceMember.create({
-        data: { workspaceId: row.id, userId: session.id, role: "owner" },
+        data: { workspaceId: row.id, userId: session.id, role: "team_admin" },
       });
 
       const workspace = mapWorkspace(row, { memberCount: 1, contentCount: 0 });
@@ -178,7 +188,9 @@ export async function POST(req: Request) {
       const stats = await getWorkspaceStats(workspaceId);
       let clientName: string | undefined;
       if (ws.clientId) {
-        const client = await prisma.agencyClient.findUnique({ where: { id: ws.clientId } });
+        const client = await prisma.agencyClient.findFirst({
+          where: { id: ws.clientId, userId: session.id },
+        });
         clientName = client?.name;
       }
 
@@ -188,6 +200,8 @@ export async function POST(req: Request) {
     }
 
     if (body.action === "delete") {
+      const perm = await requirePermission("workspace:manage");
+      if (!perm.ok) return perm.response;
       const workspaceId = String(body.workspaceId);
       const ws = await prisma.workspace.findFirst({
         where: { id: workspaceId, ownerId: session.id },
@@ -224,7 +238,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, workspaces, active });
     }
 
+    if (body.action === "update-settings") {
+      const perm = await requirePermission("workspace:manage");
+      if (!perm.ok) return perm.response;
+      await updateWorkspaceSettings(session.id, body.settings ?? {});
+      const settings = await getWorkspaceSettings(session.id);
+      return NextResponse.json({ settings });
+    }
+
     if (body.action === "update") {
+      const perm = await requirePermission("workspace:manage");
+      if (!perm.ok) return perm.response;
       const workspaceId = String(body.workspaceId);
       const ws = await prisma.workspace.findFirst({
         where: { id: workspaceId, ownerId: session.id },

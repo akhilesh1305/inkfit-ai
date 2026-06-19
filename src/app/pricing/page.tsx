@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 import { PLANS } from "@/lib/types";
 import { MarketingHeader } from "@/components/MarketingHeader";
+import { PricingPlanCta } from "@/components/billing/PricingPlanCta";
 
 export default function PricingPage() {
   return (
@@ -44,12 +45,11 @@ export default function PricingPage() {
                   </li>
                 ))}
               </ul>
-              <button
-                type="button"
-                className={`mt-8 w-full ${plan.popular ? "btn-primary" : "btn-secondary"}`}
-              >
-                {plan.price === 0 ? "Get Started Free" : `Subscribe — ₹${plan.price}`}
-              </button>
+              <PricingPlanCta
+                planId={plan.id}
+                popular={plan.popular}
+                label={plan.price === 0 ? "Get Started Free" : `Subscribe — ₹${plan.price}`}
+              />
             </div>
           ))}
         </div>

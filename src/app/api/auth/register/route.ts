@@ -1,11 +1,21 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, createSessionToken, COOKIE_NAME } from "@/lib/auth";
+import { DEFAULT_PLATFORM_ROLE } from "@/lib/rbac";
+import {
+  AUTH_RATE_LIMITS,
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
-    const { name, email, password } = await req.json();
+    const ip = getClientIp(req);
+    const limited = checkRateLimit(`register:${ip}`, AUTH_RATE_LIMITS.register);
+    if (!limited.ok) return rateLimitResponse(limited.retryAfterSec);
 
+    const { name, email, password } = await req.json();
     if (!name?.trim() || !email?.trim() || !password) {
       return NextResponse.json({ error: "All fields are required." }, { status: 400 });
     }
@@ -24,6 +34,7 @@ export async function POST(req: Request) {
         name: name.trim(),
         email: email.toLowerCase().trim(),
         password: await hashPassword(password),
+        platformRole: DEFAULT_PLATFORM_ROLE,
       },
     });
 
@@ -36,10 +47,17 @@ export async function POST(req: Request) {
       name: user.name,
       email: user.email,
       plan: user.plan,
+      platformRole: DEFAULT_PLATFORM_ROLE,
     });
 
     const res = NextResponse.json({
-      user: { id: user.id, name: user.name, email: user.email, plan: user.plan },
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        plan: user.plan,
+        platformRole: DEFAULT_PLATFORM_ROLE,
+      },
     });
 
     res.cookies.set(COOKIE_NAME, token, {
