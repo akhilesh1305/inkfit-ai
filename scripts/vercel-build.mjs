@@ -8,7 +8,7 @@ run("npx prisma generate");
 
 if (process.env.DATABASE_URL) {
   console.log("DATABASE_URL found — syncing schema...");
-  run("npx prisma db push --skip-generate");
+  run("npx prisma db push --skip-generate --accept-data-loss");
 } else {
   console.warn("DATABASE_URL not set — skipping prisma db push (add Postgres before using dashboard APIs).");
 }
