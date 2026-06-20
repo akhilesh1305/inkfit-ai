@@ -121,6 +121,21 @@ export function AgentWorkspace() {
       });
       const data = await res.json();
 
+      if (!res.ok || !data.conversation) {
+        setSyncError(true);
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === convId
+              ? {
+                  ...c,
+                  messages: c.messages.filter((m) => m.id !== optimisticAssistant.id),
+                }
+              : c
+          )
+        );
+        return;
+      }
+
       if (data.conversation) {
         setConversations((prev) => {
           const withoutTemp = prev.filter((c) => c.id !== convId);

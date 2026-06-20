@@ -21,15 +21,25 @@ export function AttributionDashboardView() {
   const [loading, setLoading] = useState(true);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async (withInsights = true) => {
-    const res = await fetch(`/api/attribution?insights=${withInsights ? "1" : "0"}`);
-    if (res.ok) {
-      const data = await res.json();
-      setDashboard(data.dashboard);
-      if (data.insights) setInsights(data.insights);
+    setLoadError(false);
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/attribution?insights=${withInsights ? "1" : "0"}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDashboard(data.dashboard);
+        if (data.insights) setInsights(data.insights);
+      } else {
+        setLoadError(true);
+      }
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -38,37 +48,56 @@ export function AttributionDashboardView() {
 
   async function handleSync() {
     setSyncing(true);
-    const res = await fetch("/api/attribution", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "sync" }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setDashboard(data.dashboard);
+    try {
+      const res = await fetch("/api/attribution", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDashboard(data.dashboard);
+      }
+    } finally {
+      setSyncing(false);
     }
-    setSyncing(false);
   }
 
   async function handleRefreshInsights() {
     setInsightsLoading(true);
-    const res = await fetch("/api/attribution", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "insights" }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setInsights(data.insights);
-      if (data.dashboard) setDashboard(data.dashboard);
+    try {
+      const res = await fetch("/api/attribution", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "insights" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setInsights(data.insights);
+        if (data.dashboard) setDashboard(data.dashboard);
+      }
+    } finally {
+      setInsightsLoading(false);
     }
-    setInsightsLoading(false);
   }
 
-  if (loading || !dashboard) {
+  if (loading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-brand-500" />
+      </div>
+    );
+  }
+
+  if (!dashboard) {
+    return (
+      <div className="card flex min-h-[40vh] flex-col items-center justify-center gap-4 py-12 text-center">
+        <p className="text-content-muted">
+          {loadError ? "Could not load attribution data." : "No attribution data yet."}
+        </p>
+        <button type="button" className="btn-primary" onClick={() => void load()}>
+          Retry
+        </button>
       </div>
     );
   }

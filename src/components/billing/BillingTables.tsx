@@ -62,7 +62,12 @@ export function BillingTables({ invoices, billingHistory }: BillingTablesProps) 
                     </td>
                     <td className="px-5 py-3">
                       {inv.pdfUrl && (
-                        <button type="button" className="btn-ghost !rounded-lg !p-2" title="Download">
+                        <button
+                          type="button"
+                          className="btn-ghost !rounded-lg !p-2"
+                          title="Download"
+                          onClick={() => window.open(inv.pdfUrl, "_blank", "noopener,noreferrer")}
+                        >
                           <Download className="h-3.5 w-3.5" />
                         </button>
                       )}

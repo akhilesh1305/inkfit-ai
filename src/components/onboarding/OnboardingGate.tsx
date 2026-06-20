@@ -8,7 +8,7 @@ import { useOnboardingStatus } from "@/hooks/use-dashboard-queries";
 export function OnboardingGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { data, isLoading, isError } = useOnboardingStatus();
+  const { data, isLoading, isError, refetch } = useOnboardingStatus();
 
   useEffect(() => {
     if (data && !data.completed) {
@@ -16,10 +16,21 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
     }
   }, [data, router, pathname]);
 
-  if (isLoading && !isError) {
+  if (isLoading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-brand-500" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
+        <p className="text-sm text-content-muted">Could not verify onboarding status.</p>
+        <button type="button" className="btn-primary text-sm" onClick={() => void refetch()}>
+          Retry
+        </button>
       </div>
     );
   }

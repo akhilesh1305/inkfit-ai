@@ -69,70 +69,101 @@ export function MarketingOSView() {
     setLoading(true);
     setSystem(null);
     setSavedId(null);
-    const result = await apiPost({ action: "generate", goal: goal.trim() });
-    setLoading(false);
-    if (result.system) {
-      setSystem(result.system);
-      showToast(result.system.live ? "AI-generated Marketing OS ready" : "Marketing OS generated");
+    try {
+      const result = await apiPost({ action: "generate", goal: goal.trim() });
+      if (result.system) {
+        setSystem(result.system);
+        showToast(result.system.live ? "AI-generated Marketing OS ready" : "Marketing OS generated");
+      } else {
+        showToast(result.error ?? "Generation failed. Please try again.");
+      }
+    } catch {
+      showToast("Network error. Please try again.");
+    } finally {
+      setLoading(false);
     }
   }
 
   async function handleRegenerate(sectionId: string, content: string) {
     if (!system) return;
     setRegeneratingId(sectionId);
-    const result = await apiPost({
-      action: "regenerate-section",
-      goal: system.goal,
-      sectionId,
-      content,
-    });
-    setRegeneratingId(null);
-    if (result.section) {
-      setSystem((prev) =>
-        prev
-          ? {
-              ...prev,
-              sections: prev.sections.map((s) =>
-                s.id === sectionId ? { ...s, content: result.section.content } : s
-              ),
-            }
-          : prev
-      );
-      showToast(`${result.section.title} regenerated`);
+    try {
+      const result = await apiPost({
+        action: "regenerate-section",
+        goal: system.goal,
+        sectionId,
+        content,
+      });
+      if (result.section) {
+        setSystem((prev) =>
+          prev
+            ? {
+                ...prev,
+                sections: prev.sections.map((s) =>
+                  s.id === sectionId ? { ...s, content: result.section.content } : s
+                ),
+              }
+            : prev
+        );
+        showToast(`${result.section.title} regenerated`);
+      } else {
+        showToast(result.error ?? "Regeneration failed.");
+      }
+    } catch {
+      showToast("Network error. Please try again.");
+    } finally {
+      setRegeneratingId(null);
     }
   }
 
   async function handleSave() {
     if (!system) return;
     setSaving(true);
-    const result = await apiPost({
-      action: "save",
-      id: savedId,
-      system,
-    });
-    setSaving(false);
-    if (result.saved) {
-      setSavedId(result.id);
-      loadSaved();
-      showToast("Strategy saved");
+    try {
+      const result = await apiPost({
+        action: "save",
+        id: savedId,
+        system,
+      });
+      if (result.saved) {
+        setSavedId(result.id);
+        loadSaved();
+        showToast("Strategy saved");
+      } else {
+        showToast(result.error ?? "Save failed.");
+      }
+    } catch {
+      showToast("Network error. Please try again.");
+    } finally {
+      setSaving(false);
     }
   }
 
   async function handleLoad(id: string) {
-    const result = await apiPost({ action: "load", id });
-    if (result.system) {
-      setSystem(result.system);
-      setGoal(result.system.goal);
-      setSavedId(result.system.id ?? id);
-      showToast("Strategy loaded");
+    try {
+      const result = await apiPost({ action: "load", id });
+      if (result.system) {
+        setSystem(result.system);
+        setGoal(result.system.goal);
+        setSavedId(result.system.id ?? id);
+        showToast("Strategy loaded");
+      } else {
+        showToast(result.error ?? "Could not load strategy.");
+      }
+    } catch {
+      showToast("Network error. Please try again.");
     }
   }
 
   async function handleDelete(id: string) {
-    await apiPost({ action: "delete", id });
-    if (savedId === id) setSavedId(null);
-    loadSaved();
-    showToast("Strategy deleted");
+    try {
+      await apiPost({ action: "delete", id });
+      if (savedId === id) setSavedId(null);
+      await loadSaved();
+      showToast("Strategy deleted");
+    } catch {
+      showToast("Could not delete strategy.");
+    }
   }
 
   function handleExport() {

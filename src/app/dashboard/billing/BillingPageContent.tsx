@@ -55,66 +55,88 @@ export default function BillingPageContent() {
   async function handleUpgrade(planId: string) {
     if (planId === "free") {
       setUpgrading("free");
-      await fetch("/api/billing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "downgrade", planId: "free" }),
-      });
-      setToast("Downgraded to Free plan.");
-      await loadBilling();
-      setUpgrading(null);
+      try {
+        const res = await fetch("/api/billing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "downgrade", planId: "free" }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          setToast(err.error ?? "Downgrade failed.");
+          return;
+        }
+        setToast("Downgraded to Free plan.");
+        await loadBilling();
+      } catch {
+        setToast("Network error. Please try again.");
+      } finally {
+        setUpgrading(null);
+      }
       return;
     }
 
     setUpgrading(planId);
-    const res = await fetch("/api/billing", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "checkout", planId }),
-    });
-    const result = await res.json();
+    try {
+      const res = await fetch("/api/billing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "checkout", planId }),
+      });
+      const result = await res.json();
 
-    if (result.checkoutUrl) {
-      window.location.href = result.checkoutUrl;
-      return;
-    }
+      if (result.checkoutUrl) {
+        window.location.href = result.checkoutUrl;
+        return;
+      }
 
-    if (result.success) {
-      setToast(
-        result.mode === "demo"
-          ? `Upgraded to ${planId} plan (demo mode).`
-          : "Plan upgraded successfully!"
-      );
-      await loadBilling();
+      if (result.success) {
+        setToast(
+          result.mode === "demo"
+            ? `Upgraded to ${planId} plan (demo mode).`
+            : "Plan upgraded successfully!"
+        );
+        await loadBilling();
+      } else {
+        setToast(result.error ?? "Upgrade failed. Please try again.");
+      }
+    } catch {
+      setToast("Network error. Please try again.");
+    } finally {
+      setUpgrading(null);
     }
-    setUpgrading(null);
   }
 
   async function handleBuyCredits() {
     setBuyingCredits(true);
-    const res = await fetch("/api/billing", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "buy_credits" }),
-    });
-    const result = await res.json();
+    try {
+      const res = await fetch("/api/billing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "buy_credits" }),
+      });
+      const result = await res.json();
 
-    if (result.checkoutUrl) {
-      window.location.href = result.checkoutUrl;
-      return;
-    }
+      if (result.checkoutUrl) {
+        window.location.href = result.checkoutUrl;
+        return;
+      }
 
-    if (result.success) {
-      setToast(
-        result.mode === "demo"
-          ? `Added ${result.credits} bonus credits (demo mode).`
-          : `Added ${result.credits} bonus credits.`
-      );
-      await loadBilling();
-    } else if (result.error) {
-      setToast(result.error);
+      if (result.success) {
+        setToast(
+          result.mode === "demo"
+            ? `Added ${result.credits} bonus credits (demo mode).`
+            : `Added ${result.credits} bonus credits.`
+        );
+        await loadBilling();
+      } else {
+        setToast(result.error ?? "Could not start credit pack checkout.");
+      }
+    } catch {
+      setToast("Network error. Please try again.");
+    } finally {
+      setBuyingCredits(false);
     }
-    setBuyingCredits(false);
   }
 
   if (loading) {

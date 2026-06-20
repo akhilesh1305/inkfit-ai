@@ -122,7 +122,7 @@ export default function HomePage() {
                   </li>
                 ))}
               </ul>
-              <Link href="/dashboard/brand" className="btn-primary mt-10 inline-flex">
+              <Link href="/register" className="btn-primary mt-10 inline-flex">
                 Set Up Your Brand Kit <ArrowRight className="h-4 w-4" />
               </Link>
             </FadeIn>

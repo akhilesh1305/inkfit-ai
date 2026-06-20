@@ -66,7 +66,17 @@ export function MarketingEmployeeView() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    return { res, data: await res.json() };
+    let data: { error?: string; run?: EmployeeRun } = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = { error: "Invalid server response" };
+    }
+    return { res, data };
+  }
+
+  function actionError(res: Response, data: { error?: string }) {
+    return data.error ?? (res.status === 402 ? "Insufficient credits" : "Request failed. Please try again.");
   }
 
   const runAutonomousLoop = useCallback(
@@ -81,35 +91,41 @@ export function MarketingEmployeeView() {
       setAutoRunning(true);
 
       let active = currentRun;
-      while (active.autoRunStatus === "running") {
-        const { res, data } = await apiPost({
-          action: "autonomous_tick",
-          runId: active.id,
-        });
+      try {
+        while (active.autoRunStatus === "running") {
+          const { res, data } = await apiPost({
+            action: "autonomous_tick",
+            runId: active.id,
+          });
 
-        if (res.status === 402) {
-          showToast(data.error ?? "Insufficient credits — autonomous run paused");
-          setAutoRunning(false);
-          tickInFlight.current = false;
-          return;
+          if (res.status === 402) {
+            showToast(data.error ?? "Insufficient credits — autonomous run paused");
+            return;
+          }
+
+          if (!res.ok || !data.run) {
+            showToast(actionError(res, data));
+            break;
+          }
+
+          active = data.run;
+          setRun(active);
+
+          if (active.autoRunStatus !== "running") break;
+          await new Promise((r) => setTimeout(r, 400));
         }
 
-        if (!res.ok || !data.run) break;
-        active = data.run;
-        setRun(active);
-
-        if (active.autoRunStatus !== "running") break;
-        await new Promise((r) => setTimeout(r, 400));
-      }
-
-      setAutoRunning(false);
-      tickInFlight.current = false;
-
-      if (active.status === "review") {
-        showToast("Autonomous run complete — review your deliverables");
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem("inkfit-employee-completed", "1");
+        if (active.status === "review") {
+          showToast("Autonomous run complete — review your deliverables");
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem("inkfit-employee-completed", "1");
+          }
         }
+      } catch {
+        showToast("Network error — autonomous run paused");
+      } finally {
+        setAutoRunning(false);
+        tickInFlight.current = false;
       }
     },
     [showToast]
@@ -121,24 +137,30 @@ export function MarketingEmployeeView() {
 
     setInput("");
     setLoading(true);
+    try {
+      const { res, data } = await apiPost({
+        action: "start",
+        goal: trimmed,
+        mode,
+      });
 
-    const { res, data } = await apiPost({
-      action: "start",
-      goal: trimmed,
-      mode,
-    });
-    setLoading(false);
-
-    if (res.status === 402) {
-      showToast(data.error ?? "Insufficient credits");
-      return;
-    }
-    if (res.ok && data.run) {
-      setRun(data.run);
-      setRecentRuns((prev) => [data.run, ...prev.filter((r) => r.id !== data.run.id)].slice(0, 5));
-      if (data.run.mode === "autonomous" && data.run.autoRunStatus === "running") {
-        void runAutonomousLoop(data.run);
+      if (res.status === 402) {
+        showToast(data.error ?? "Insufficient credits");
+        return;
       }
+      if (res.ok && data.run) {
+        setRun(data.run);
+        setRecentRuns((prev) => [data.run!, ...prev.filter((r) => r.id !== data.run!.id)].slice(0, 5));
+        if (data.run.mode === "autonomous" && data.run.autoRunStatus === "running") {
+          void runAutonomousLoop(data.run);
+        }
+      } else {
+        showToast(actionError(res, data));
+      }
+    } catch {
+      showToast("Could not start mission. Check your connection and try again.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -148,41 +170,61 @@ export function MarketingEmployeeView() {
   ) {
     if (!run || actionLoading) return;
     setActionLoading(true);
+    try {
+      const { res, data } = await apiPost({ action, runId: run.id, stepId });
 
-    const { res, data } = await apiPost({ action, runId: run.id, stepId });
-    setActionLoading(false);
-
-    if (res.status === 402) {
-      showToast(data.error ?? "Insufficient credits");
-      return;
-    }
-    if (res.ok && data.run) {
-      setRun(data.run);
-      if (action === "approve" && data.run.status === "completed") {
-        showToast("Marketing package complete!");
+      if (res.status === 402) {
+        showToast(data.error ?? "Insufficient credits");
+        return;
       }
+      if (res.ok && data.run) {
+        setRun(data.run);
+        if (action === "approve" && data.run.status === "completed") {
+          showToast("Marketing package complete!");
+        }
+      } else {
+        showToast(actionError(res, data));
+      }
+    } catch {
+      showToast("Action failed. Please try again.");
+    } finally {
+      setActionLoading(false);
     }
   }
 
   async function handleApproveAll() {
     if (!run || actionLoading) return;
     setActionLoading(true);
-    const { res, data } = await apiPost({ action: "approve_all", runId: run.id });
-    setActionLoading(false);
-    if (res.ok && data.run) {
-      setRun(data.run);
-      showToast("All deliverables approved and saved!");
+    try {
+      const { res, data } = await apiPost({ action: "approve_all", runId: run.id });
+      if (res.ok && data.run) {
+        setRun(data.run);
+        showToast("All deliverables approved and saved!");
+      } else {
+        showToast(actionError(res, data));
+      }
+    } catch {
+      showToast("Could not approve all steps. Please try again.");
+    } finally {
+      setActionLoading(false);
     }
   }
 
   async function handlePublish() {
     if (!run || actionLoading) return;
     setActionLoading(true);
-    const { res, data } = await apiPost({ action: "publish", runId: run.id });
-    setActionLoading(false);
-    if (res.ok && data.run) {
-      setRun(data.run);
-      showToast("Publishing schedule synced to calendar!");
+    try {
+      const { res, data } = await apiPost({ action: "publish", runId: run.id });
+      if (res.ok && data.run) {
+        setRun(data.run);
+        showToast("Publishing schedule synced to calendar!");
+      } else {
+        showToast(actionError(res, data));
+      }
+    } catch {
+      showToast("Could not sync to calendar. Please try again.");
+    } finally {
+      setActionLoading(false);
     }
   }
 

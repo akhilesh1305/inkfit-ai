@@ -124,7 +124,7 @@ export function WorkflowsView() {
     }
   }
 
-  async function handleSave() {
+  async function handleSave(): Promise<boolean> {
     if (!activeId) {
       const { res, data } = await apiPost({
         action: "create",
@@ -136,22 +136,30 @@ export function WorkflowsView() {
         setDirty(false);
         await loadList();
         showToast("Workflow saved");
+        return true;
       }
-      return;
+      showToast(data.error ?? "Save failed");
+      return false;
     }
 
     setSaving(true);
-    const { res } = await apiPost({
-      action: "save",
-      id: activeId,
-      name,
-      graph,
-    });
-    setSaving(false);
-    if (res.ok) {
-      setDirty(false);
-      await loadList();
-      showToast("Workflow saved");
+    try {
+      const { res, data } = await apiPost({
+        action: "save",
+        id: activeId,
+        name,
+        graph,
+      });
+      if (res.ok) {
+        setDirty(false);
+        await loadList();
+        showToast("Workflow saved");
+        return true;
+      }
+      showToast(data.error ?? "Save failed");
+      return false;
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -165,7 +173,10 @@ export function WorkflowsView() {
       return;
     }
 
-    if (dirty) await handleSave();
+    if (dirty) {
+      const saved = await handleSave();
+      if (!saved) return;
+    }
 
     setRunning(true);
     setRunResult(null);

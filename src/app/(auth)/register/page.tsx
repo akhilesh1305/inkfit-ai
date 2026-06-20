@@ -9,6 +9,7 @@ function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const plan = searchParams.get("plan");
+  const redirect = searchParams.get("redirect");
   const ref = searchParams.get("ref");
 
   const [name, setName] = useState("");
@@ -35,6 +36,8 @@ function RegisterForm() {
 
       if (plan && ["creator", "pro", "agency"].includes(plan)) {
         router.push(`/dashboard/billing?upgrade=${plan}`);
+      } else if (redirect && redirect.startsWith("/") && !redirect.startsWith("//")) {
+        router.push(redirect);
       } else {
         router.push("/onboarding");
       }

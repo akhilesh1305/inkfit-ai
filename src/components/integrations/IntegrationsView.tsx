@@ -72,32 +72,47 @@ export function IntegrationsView() {
   }
 
   async function handleConnect(provider: IntegrationProviderId, oauthConfigured: boolean) {
-    setBusyProvider(provider);
     if (oauthConfigured) {
       window.location.href = `/api/integrations/oauth/${provider}`;
       return;
     }
-    const { res } = await apiPost({ action: "demo-connect", provider });
-    setBusyProvider(null);
-    showToast(res.ok ? "Demo connection established" : "Failed to connect");
+    setBusyProvider(provider);
+    try {
+      const { res } = await apiPost({ action: "demo-connect", provider });
+      showToast(res.ok ? "Demo connection established" : "Failed to connect");
+    } catch {
+      showToast("Connection failed. Please try again.");
+    } finally {
+      setBusyProvider(null);
+    }
   }
 
   async function handleDisconnect(provider: IntegrationProviderId) {
     setBusyProvider(provider);
-    const { res } = await apiPost({ action: "disconnect", provider });
-    setBusyProvider(null);
-    showToast(res.ok ? "Disconnected" : "Failed to disconnect");
+    try {
+      const { res } = await apiPost({ action: "disconnect", provider });
+      showToast(res.ok ? "Disconnected" : "Failed to disconnect");
+    } catch {
+      showToast("Disconnect failed. Please try again.");
+    } finally {
+      setBusyProvider(null);
+    }
   }
 
   async function handleSync(provider: IntegrationProviderId) {
     setBusyProvider(provider);
-    const { res, json } = await apiPost({ action: "sync", provider });
-    setBusyProvider(null);
-    showToast(
-      res.ok && json.result?.success
-        ? "Sync completed"
-        : json.result?.error ?? "Sync failed"
-    );
+    try {
+      const { res, json } = await apiPost({ action: "sync", provider });
+      showToast(
+        res.ok && json.result?.success
+          ? "Sync completed"
+          : json.result?.error ?? "Sync failed"
+      );
+    } catch {
+      showToast("Sync failed. Please try again.");
+    } finally {
+      setBusyProvider(null);
+    }
   }
 
   if (loading) {

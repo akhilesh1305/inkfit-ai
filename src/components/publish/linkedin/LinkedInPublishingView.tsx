@@ -36,16 +36,26 @@ export function LinkedInPublishingView() {
   const [submitting, setSubmitting] = useState(false);
   const [tab, setTab] = useState<TabId>("compose");
   const [toast, setToast] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/publish/linkedin");
-    if (res.ok) {
-      const data = await res.json();
-      setConnection(data.connection);
-      setPosts(data.posts ?? []);
-      setStats(data.stats ?? null);
+    setLoadError(false);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/publish/linkedin");
+      if (res.ok) {
+        const data = await res.json();
+        setConnection(data.connection);
+        setPosts(data.posts ?? []);
+        setStats(data.stats ?? null);
+      } else {
+        setLoadError(true);
+      }
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -153,10 +163,23 @@ export function LinkedInPublishingView() {
     }
   }
 
-  if (loading || !connection) {
+  if (loading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-[#0A66C2]" />
+      </div>
+    );
+  }
+
+  if (!connection) {
+    return (
+      <div className="card flex min-h-[40vh] flex-col items-center justify-center gap-4 py-12 text-center">
+        <p className="text-content-muted">
+          {loadError ? "Could not load LinkedIn publishing." : "LinkedIn data unavailable."}
+        </p>
+        <button type="button" className="btn-primary" onClick={() => void load()}>
+          Retry
+        </button>
       </div>
     );
   }

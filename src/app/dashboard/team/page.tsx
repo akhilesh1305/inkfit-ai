@@ -37,15 +37,18 @@ export default function TeamPage() {
 
   async function handleInvite(data: { name: string; email: string; role: TeamRole }) {
     setInviting(true);
-    const res = await fetch("/api/team", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "invite", ...data }),
-    });
-    const result = await res.json();
-    setInviting(false);
-    if (!res.ok) throw new Error(result.error ?? "Invite failed");
-    setMembers((prev) => [...prev, result.member]);
+    try {
+      const res = await fetch("/api/team", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "invite", ...data }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error ?? "Invite failed");
+      setMembers((prev) => [...prev, result.member]);
+    } finally {
+      setInviting(false);
+    }
   }
 
   async function handleRoleChange(id: string, role: TeamRole) {
@@ -62,12 +65,14 @@ export default function TeamPage() {
 
   async function handleRemove(id: string) {
     if (!confirm("Remove this team member?")) return;
-    await fetch("/api/team", {
+    const res = await fetch("/api/team", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "remove", id }),
     });
-    setMembers((prev) => prev.filter((m) => m.id !== id));
+    if (res.ok) {
+      setMembers((prev) => prev.filter((m) => m.id !== id));
+    }
   }
 
   async function handleSaveSettings() {

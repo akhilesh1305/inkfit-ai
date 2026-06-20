@@ -46,16 +46,26 @@ export function ExtensionsView() {
 
   async function handleToggleIntegration(platform: IntegrationPlatform, connected: boolean) {
     setConnecting(platform);
-    await apiPost({ action: "toggle-integration", platform, connected });
-    setConnecting(null);
-    showToast(connected ? `${platform} connected` : `${platform} disconnected`);
+    try {
+      await apiPost({ action: "toggle-integration", platform, connected });
+      showToast(connected ? `${platform} connected` : `${platform} disconnected`);
+    } catch {
+      showToast("Action failed. Please try again.");
+    } finally {
+      setConnecting(null);
+    }
   }
 
   async function handleMarkInstalled() {
     setMarking(true);
-    await apiPost({ action: "mark-installed" });
-    setMarking(false);
-    showToast("Extension marked as installed");
+    try {
+      await apiPost({ action: "mark-installed" });
+      showToast("Extension marked as installed");
+    } catch {
+      showToast("Could not update status. Please try again.");
+    } finally {
+      setMarking(false);
+    }
   }
 
   async function handleAddWebsite(domain: string, label?: string) {
