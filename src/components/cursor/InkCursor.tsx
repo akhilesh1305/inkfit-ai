@@ -1,8 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Sparkles } from "lucide-react";
+import { cursorError, cursorLog, cursorWarn } from "@/lib/cursor/cursor-debug";
+import {
+  disableCustomCursorClass,
+  enableCustomCursorClass,
+  isPrimaryTouchDevice,
+  prefersReducedMotion,
+} from "@/lib/cursor/cursor-env";
 import "./cosmos-cursor.css";
 
 export type CosmosScene =
@@ -40,6 +48,8 @@ interface EnergyRing {
   maxLife: number;
 }
 
+type CursorMode = "pending" | "ready" | "fallback" | "touch";
+
 const ORBIT_COUNT = 8;
 const LERP = 0.11;
 const LERP_FAST = 0.5;
@@ -48,15 +58,6 @@ const BURST_CAP = 36;
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
-}
-
-function isTouchDevice() {
-  return (
-    "ontouchstart" in window ||
-    navigator.maxTouchPoints > 0 ||
-    window.matchMedia("(hover: none)").matches ||
-    window.matchMedia("(pointer: coarse)").matches
-  );
 }
 
 function pickLabel(el: Element): string {
@@ -153,13 +154,21 @@ function orbScale(scene: CosmosScene, clicking: boolean): number {
   }
 }
 
+function activateFallback(reason: string): void {
+  cursorError("Falling back to native cursor", { reason });
+  disableCustomCursorClass();
+  document.documentElement.classList.add("cosmos-cursor-fallback");
+}
+
 /** @deprecated Use InkCursor — same component, cosmos branding */
 export function CosmosCursor() {
   return <InkCursor />;
 }
 
 export function InkCursor() {
-  const [active, setActive] = useState(false);
+  const [portalReady, setPortalReady] = useState(false);
+  const [mode, setMode] = useState<CursorMode>("pending");
+  const [engineReady, setEngineReady] = useState(false);
   const [scene, setScene] = useState<CosmosScene>("default");
   const [label, setLabel] = useState("");
   const [clicking, setClicking] = useState(false);
@@ -178,23 +187,57 @@ export function InkCursor() {
   const timeRef = useRef(0);
   const lastMoveRef = useRef(0);
   const reducedRef = useRef(false);
+  const hasPositionedRef = useRef(false);
+  const moveLogCountRef = useRef(0);
 
   useEffect(() => {
-    if (isTouchDevice()) return;
+    setPortalReady(true);
+    cursorLog("Component mounted (client)");
+  }, []);
 
-    reducedRef.current = Boolean(reducedMotion);
-    setActive(true);
-    document.documentElement.classList.add("cosmos-cursor-active");
-    if (reducedRef.current) {
-      document.documentElement.classList.add("cosmos-cursor-reduced");
+  useEffect(() => {
+    if (isPrimaryTouchDevice()) {
+      cursorLog("Primary touch device detected — using native cursor");
+      setMode("touch");
+      return;
+    }
+    cursorLog("Environment OK — rendering cursor layer");
+    setMode("ready");
+  }, []);
+
+  useEffect(() => {
+    if (mode !== "ready") return;
+
+    setEngineReady(false);
+
+    const root = rootRef.current;
+    const canvas = canvasRef.current;
+
+    if (!root || !canvas) {
+      cursorWarn("Init aborted: DOM refs missing on ready pass");
+      activateFallback("refs-missing");
+      setMode("fallback");
+      return;
     }
 
-    const canvas = canvasRef.current;
-    const root = rootRef.current;
-    if (!canvas || !root) return;
+    reducedRef.current = reducedMotion ?? prefersReducedMotion();
 
     const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
-    if (!ctx) return;
+    if (!ctx) {
+      cursorWarn("Init aborted: canvas 2d context unavailable");
+      activateFallback("canvas-context");
+      setMode("fallback");
+      return;
+    }
+
+    enableCustomCursorClass(reducedRef.current);
+    root.style.opacity = "1";
+    root.style.visibility = "visible";
+
+    cursorLog("Cursor engine initialized", {
+      reducedMotion: reducedRef.current,
+      zIndex: getComputedStyle(root).zIndex,
+    });
 
     const resize = () => {
       dprRef.current = Math.min(window.devicePixelRatio || 1, 2);
@@ -235,6 +278,18 @@ export function InkCursor() {
       mouseRef.current = { x: e.clientX, y: e.clientY, active: true };
       lastMoveRef.current = performance.now();
 
+      if (!hasPositionedRef.current) {
+        posRef.current = { x: e.clientX, y: e.clientY };
+        root.style.transform = `translate3d(${e.clientX}px, ${e.clientY}px, 0)`;
+        hasPositionedRef.current = true;
+        cursorLog("First mouse position applied", { x: e.clientX, y: e.clientY });
+      }
+
+      if (moveLogCountRef.current < 3) {
+        moveLogCountRef.current += 1;
+        cursorLog("Mouse position update", { x: e.clientX, y: e.clientY, n: moveLogCountRef.current });
+      }
+
       const resolved = resolveScene(
         document.elementFromPoint(e.clientX, e.clientY),
         window.location.pathname
@@ -244,15 +299,6 @@ export function InkCursor() {
       setLabel(resolved.label);
     };
 
-    const onLeave = () => {
-      mouseRef.current.active = false;
-      root.style.opacity = "0";
-    };
-
-    const onEnter = () => {
-      root.style.opacity = "1";
-    };
-
     const onDown = (e: MouseEvent) => {
       setClicking(true);
       if (!reducedRef.current) spawnBurst(e.clientX, e.clientY);
@@ -260,11 +306,9 @@ export function InkCursor() {
 
     const onUp = () => setClicking(false);
 
-    document.addEventListener("mousemove", onMove, { passive: true });
-    document.addEventListener("mouseleave", onLeave);
-    document.addEventListener("mouseenter", onEnter);
-    document.addEventListener("mousedown", onDown, { passive: true });
-    document.addEventListener("mouseup", onUp, { passive: true });
+    window.addEventListener("mousemove", onMove, { passive: true });
+    window.addEventListener("mousedown", onDown, { passive: true });
+    window.addEventListener("mouseup", onUp, { passive: true });
 
     const frame = (now: number) => {
       timeRef.current = now;
@@ -284,7 +328,7 @@ export function InkCursor() {
 
       const idleMs = now - lastMoveRef.current;
       const isIdle = idleMs > 1200;
-      if (isIdle && !reducedRef.current) {
+      if (isIdle && !reducedRef.current && mouse.active) {
         targetY += Math.sin(now * 0.002) * 5;
         targetX += Math.cos(now * 0.0015) * 3;
       }
@@ -296,7 +340,7 @@ export function InkCursor() {
         root.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`;
       }
 
-      if (!reducedRef.current && ctx) {
+      if (!reducedRef.current) {
         const w = canvas.width / dprRef.current;
         const h = canvas.height / dprRef.current;
         ctx.clearRect(0, 0, w, h);
@@ -394,53 +438,68 @@ export function InkCursor() {
     };
 
     rafRef.current = requestAnimationFrame(frame);
+    setEngineReady(true);
+    cursorLog("Cursor rendered successfully", {
+      orbVisible: getComputedStyle(root.querySelector(".cosmos-orb") ?? root).opacity,
+    });
 
     const motionMq = window.matchMedia("(prefers-reduced-motion: reduce)");
     const onMotionChange = (e: MediaQueryListEvent) => {
       reducedRef.current = e.matches;
       document.documentElement.classList.toggle("cosmos-cursor-reduced", e.matches);
+      cursorLog("prefers-reduced-motion changed", { reduced: e.matches });
     };
     motionMq.addEventListener("change", onMotionChange);
 
     return () => {
       cancelAnimationFrame(rafRef.current);
-      document.documentElement.classList.remove("cosmos-cursor-active", "cosmos-cursor-reduced");
+      disableCustomCursorClass();
+      document.documentElement.classList.remove("cosmos-cursor-fallback");
       window.removeEventListener("resize", resize);
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseleave", onLeave);
-      document.removeEventListener("mouseenter", onEnter);
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("mouseup", onUp);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("mouseup", onUp);
       motionMq.removeEventListener("change", onMotionChange);
+      cursorLog("Cursor engine cleaned up");
     };
-  }, [reducedMotion]);
+  }, [mode, reducedMotion]);
 
-  if (!active) return null;
+  if (!portalReady || mode === "touch" || mode === "fallback") {
+    return null;
+  }
 
   const scale = orbScale(scene, clicking);
   const showLabel = scene === "generate" && label.length > 0;
   const showAiIcon = scene === "employee";
   const glowStrong = scene === "generate" || scene === "employee";
+  const motionReduced = Boolean(reducedMotion);
 
-  return (
-    <div className="cosmos-cursor-layer" aria-hidden="true">
+  const layer = (
+    <div
+      className="cosmos-cursor-layer"
+      aria-hidden="true"
+      data-cursor-mode={engineReady ? "active" : mode}
+      data-cursor-scene={scene}
+    >
       <canvas ref={canvasRef} className="cosmos-cursor-canvas" />
       <div ref={rootRef} className="cosmos-cursor-root">
         <div className="cosmos-cursor-body">
           <motion.div
             className="cosmos-orb-halo"
+            initial={{ opacity: 0.85, scale: 1 }}
             animate={{
-              opacity: glowStrong ? 1 : 0.75,
-              scale: glowStrong ? 1.35 : isIdlePulse(scene) ? [1, 1.08, 1] : 1,
+              opacity: glowStrong ? 1 : 0.85,
+              scale: motionReduced ? 1 : glowStrong ? 1.35 : isIdlePulse(scene) ? [1, 1.08, 1] : 1,
             }}
             transition={{
               duration: scene === "employee" ? 2.2 : 0.45,
-              repeat: scene === "employee" || scene === "default" ? Infinity : 0,
+              repeat: motionReduced ? 0 : scene === "employee" || scene === "default" ? Infinity : 0,
               ease: "easeInOut",
             }}
           />
           <motion.div
             className="cosmos-orb-ring"
+            initial={{ opacity: 0, scale: 0.7 }}
             animate={{
               opacity: showLabel ? 1 : scene === "marketing" ? 0.5 : 0,
               scale: showLabel ? 1 : 0.7,
@@ -449,12 +508,13 @@ export function InkCursor() {
           />
           <motion.div
             className="cosmos-orb"
+            initial={{ scale: 1, opacity: 1 }}
             animate={{
               scale: clicking ? scale * 0.92 : scale,
-              boxShadow:
-                glowStrong
-                  ? "0 0 28px rgba(124,58,237,0.95), 0 0 56px rgba(59,130,246,0.55), 0 0 80px rgba(6,182,212,0.3)"
-                  : "0 0 16px rgba(124,58,237,0.7), 0 0 32px rgba(59,130,246,0.45), 0 0 48px rgba(6,182,212,0.2)",
+              opacity: 1,
+              boxShadow: glowStrong
+                ? "0 0 28px rgba(124,58,237,0.95), 0 0 56px rgba(59,130,246,0.55), 0 0 80px rgba(6,182,212,0.3)"
+                : "0 0 16px rgba(124,58,237,0.7), 0 0 32px rgba(59,130,246,0.45), 0 0 48px rgba(6,182,212,0.2)",
             }}
             transition={{
               scale: { duration: 0.35, ease: [0.22, 1, 0.36, 1] },
@@ -474,8 +534,13 @@ export function InkCursor() {
           {showAiIcon && (
             <motion.div
               className="cosmos-ai-icon"
-              animate={{ opacity: 1, scale: [0.9, 1.05, 0.9] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              initial={{ opacity: 1, scale: 1 }}
+              animate={
+                motionReduced
+                  ? { opacity: 1, scale: 1 }
+                  : { opacity: 1, scale: [0.9, 1.05, 0.9] }
+              }
+              transition={{ duration: 2, repeat: motionReduced ? 0 : Infinity, ease: "easeInOut" }}
             >
               <Sparkles className="h-3 w-3" strokeWidth={2.5} />
             </motion.div>
@@ -484,6 +549,8 @@ export function InkCursor() {
       </div>
     </div>
   );
+
+  return createPortal(layer, document.body);
 }
 
 function isIdlePulse(scene: CosmosScene) {
