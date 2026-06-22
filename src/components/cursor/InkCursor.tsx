@@ -11,147 +11,35 @@ import {
   isPrimaryTouchDevice,
   prefersReducedMotion,
 } from "@/lib/cursor/cursor-env";
+import {
+  drawNavigatorFrame,
+  initOrbiters,
+  spawnClickBurst,
+  spawnWarpParticles,
+} from "@/lib/cursor/navigator-canvas";
+import { isDashboardPath, orbScale, pageIntensity, resolveNavigatorHover } from "@/lib/cursor/navigator-resolve";
+import type {
+  BurstParticle,
+  EnergyRing,
+  NavigatorHoverState,
+  NavigatorScene,
+  TrailPoint,
+  WarpParticle,
+} from "@/lib/cursor/navigator-types";
+import {
+  BURST_CAP,
+  LERP,
+  LERP_FAST,
+  MAGNET,
+  ORBIT_COUNT,
+  TRAIL_MAX,
+  WARP_PARTICLE_CAP,
+  WARP_VELOCITY_THRESHOLD,
+} from "@/lib/cursor/navigator-types";
 import "./cosmos-cursor.css";
-
-export type CosmosScene =
-  | "default"
-  | "generate"
-  | "analytics"
-  | "marketing"
-  | "employee"
-  | "input"
-  | "card";
-
-interface Orbiter {
-  angle: number;
-  radius: number;
-  speed: number;
-  size: number;
-}
-
-interface BurstParticle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  maxLife: number;
-  size: number;
-}
-
-interface EnergyRing {
-  x: number;
-  y: number;
-  radius: number;
-  maxRadius: number;
-  life: number;
-  maxLife: number;
-}
-
-type CursorMode = "pending" | "ready" | "fallback" | "touch";
-
-const ORBIT_COUNT = 8;
-const LERP = 0.11;
-const LERP_FAST = 0.5;
-const MAGNET = 0.16;
-const BURST_CAP = 36;
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
-}
-
-function pickLabel(el: Element): string {
-  const custom = el.getAttribute("data-ink-label");
-  if (custom) return custom.slice(0, 16);
-  const aria = el.getAttribute("aria-label");
-  if (aria) return aria.slice(0, 16);
-  const text = el.textContent?.trim();
-  if (text) return text.slice(0, 16);
-  return "Generate";
-}
-
-function isGenerateControl(el: Element): boolean {
-  if (el.closest("[data-ink-generate]")) return true;
-  if (el.closest(".btn-primary")) return true;
-  const btn = el.closest("button, [role='button']");
-  if (btn) {
-    const t = btn.textContent?.toLowerCase() ?? "";
-    return /generate|create|launch|start|run|publish|save/.test(t);
-  }
-  return false;
-}
-
-function pageScene(pathname: string): CosmosScene | null {
-  if (pathname.includes("/dashboard/employee")) return "employee";
-  if (pathname.includes("/dashboard/marketing-os")) return "marketing";
-  if (pathname.includes("/dashboard/analytics") || pathname.includes("/dashboard/performance")) {
-    return "analytics";
-  }
-  return null;
-}
-
-function resolveScene(target: Element | null, pathname: string): {
-  scene: CosmosScene;
-  label: string;
-  magneticRect: DOMRect | null;
-} {
-  if (!target || target.closest(".cosmos-cursor-layer")) {
-    return { scene: pageScene(pathname) ?? "default", label: "", magneticRect: null };
-  }
-
-  const inputEl = target.closest(
-    "input:not([type=hidden]):not([type=checkbox]):not([type=radio]), textarea, select, [contenteditable=true]"
-  );
-  if (inputEl) return { scene: "input", label: "", magneticRect: null };
-
-  const interactive = target.closest(
-    'button, a[href], [role="button"], .btn-primary, .btn-secondary, .btn-ghost, [data-ink-button]'
-  );
-  if (interactive && !interactive.hasAttribute("disabled")) {
-    if (isGenerateControl(interactive)) {
-      return { scene: "generate", label: pickLabel(interactive), magneticRect: null };
-    }
-    return { scene: "generate", label: pickLabel(interactive), magneticRect: null };
-  }
-
-  const cardEl = target.closest(".card, .card-hover, .card-popular, [data-ink-magnetic]");
-  if (cardEl) {
-    return { scene: "card", label: "", magneticRect: cardEl.getBoundingClientRect() };
-  }
-
-  const ambient = pageScene(pathname);
-  if (ambient) return { scene: ambient, label: "", magneticRect: null };
-
-  return { scene: "default", label: "", magneticRect: null };
-}
-
-function initOrbiters(): Orbiter[] {
-  return Array.from({ length: ORBIT_COUNT }, (_, i) => ({
-    angle: (i / ORBIT_COUNT) * Math.PI * 2,
-    radius: 18 + (i % 3) * 4,
-    speed: 0.012 + (i % 4) * 0.003,
-    size: 2 + (i % 3) * 0.6,
-  }));
-}
-
-function orbScale(scene: CosmosScene, clicking: boolean): number {
-  if (clicking) return scene === "generate" ? 1.2 : 0.88;
-  switch (scene) {
-    case "generate":
-      return 1.65;
-    case "employee":
-      return 1.22;
-    case "analytics":
-      return 1.12;
-    case "marketing":
-      return 1.18;
-    case "card":
-      return 1.15;
-    case "input":
-      return 0.75;
-    default:
-      return 1;
-  }
 }
 
 function activateFallback(reason: string): void {
@@ -160,17 +48,20 @@ function activateFallback(reason: string): void {
   document.documentElement.classList.add("cosmos-cursor-fallback");
 }
 
-/** @deprecated Use InkCursor — same component, cosmos branding */
+/** @deprecated Use InkCursor — AI Navigator Cursor */
 export function CosmosCursor() {
   return <InkCursor />;
 }
 
+export type CosmosScene = NavigatorScene;
+
 export function InkCursor() {
   const [portalReady, setPortalReady] = useState(false);
-  const [mode, setMode] = useState<CursorMode>("pending");
+  const [mode, setMode] = useState<"pending" | "ready" | "fallback" | "touch">("pending");
   const [engineReady, setEngineReady] = useState(false);
-  const [scene, setScene] = useState<CosmosScene>("default");
-  const [label, setLabel] = useState("");
+  const [scene, setScene] = useState<NavigatorScene>("default");
+  const [assistantLabel, setAssistantLabel] = useState("");
+  const [scanInsight, setScanInsight] = useState("");
   const [clicking, setClicking] = useState(false);
   const reducedMotion = useReducedMotion();
 
@@ -178,30 +69,42 @@ export function InkCursor() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mouseRef = useRef({ x: -100, y: -100, active: false });
   const posRef = useRef({ x: -100, y: -100 });
-  const hoverRef = useRef({ scene: "default" as CosmosScene, label: "", magneticRect: null as DOMRect | null });
-  const orbitersRef = useRef<Orbiter[]>(initOrbiters());
+  const prevMouseRef = useRef({ x: -100, y: -100, t: 0 });
+  const velocityRef = useRef(0);
+  const hoverRef = useRef<NavigatorHoverState>({
+    scene: "default",
+    assistantLabel: "",
+    scanInsight: "",
+    scanRect: null,
+    magneticRect: null,
+  });
+  const intensityRef = useRef(1);
+  const orbitersRef = useRef(initOrbiters(ORBIT_COUNT));
   const burstsRef = useRef<BurstParticle[]>([]);
   const ringsRef = useRef<EnergyRing[]>([]);
+  const trailRef = useRef<TrailPoint[]>([]);
+  const warpRef = useRef<WarpParticle[]>([]);
+  const scanPhaseRef = useRef(0);
   const rafRef = useRef(0);
   const dprRef = useRef(1);
-  const timeRef = useRef(0);
   const lastMoveRef = useRef(0);
   const reducedRef = useRef(false);
   const hasPositionedRef = useRef(false);
   const moveLogCountRef = useRef(0);
+  const warpClassRef = useRef(false);
 
   useEffect(() => {
     setPortalReady(true);
-    cursorLog("Component mounted (client)");
+    cursorLog("AI Navigator mounted (client)");
   }, []);
 
   useEffect(() => {
     if (isPrimaryTouchDevice()) {
-      cursorLog("Primary touch device detected — using native cursor");
+      cursorLog("Primary touch device — native cursor");
       setMode("touch");
       return;
     }
-    cursorLog("Environment OK — rendering cursor layer");
+    cursorLog("AI Navigator ready — rendering layer");
     setMode("ready");
   }, []);
 
@@ -214,30 +117,26 @@ export function InkCursor() {
     const canvas = canvasRef.current;
 
     if (!root || !canvas) {
-      cursorWarn("Init aborted: DOM refs missing on ready pass");
+      cursorWarn("Init aborted: DOM refs missing");
       activateFallback("refs-missing");
       setMode("fallback");
       return;
     }
 
     reducedRef.current = reducedMotion ?? prefersReducedMotion();
+    enableCustomCursorClass(reducedRef.current);
+    root.style.opacity = "1";
+    root.style.visibility = "visible";
 
     const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
     if (!ctx) {
-      cursorWarn("Init aborted: canvas 2d context unavailable");
+      cursorWarn("Init aborted: canvas context unavailable");
       activateFallback("canvas-context");
       setMode("fallback");
       return;
     }
 
-    enableCustomCursorClass(reducedRef.current);
-    root.style.opacity = "1";
-    root.style.visibility = "visible";
-
-    cursorLog("Cursor engine initialized", {
-      reducedMotion: reducedRef.current,
-      zIndex: getComputedStyle(root).zIndex,
-    });
+    cursorLog("AI Navigator engine initialized", { reducedMotion: reducedRef.current });
 
     const resize = () => {
       dprRef.current = Math.min(window.devicePixelRatio || 1, 2);
@@ -253,30 +152,35 @@ export function InkCursor() {
     resize();
     window.addEventListener("resize", resize, { passive: true });
 
-    const spawnBurst = (x: number, y: number) => {
-      for (let i = 0; i < 14; i++) {
-        if (burstsRef.current.length >= BURST_CAP) burstsRef.current.shift();
-        const angle = (i / 14) * Math.PI * 2 + Math.random() * 0.4;
-        const speed = 1.5 + Math.random() * 3;
-        burstsRef.current.push({
-          x,
-          y,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          life: 500 + Math.random() * 300,
-          maxLife: 800,
-          size: 1.5 + Math.random() * 2,
-        });
-      }
-      ringsRef.current.push(
-        { x, y, radius: 6, maxRadius: 48, life: 600, maxLife: 600 },
-        { x, y, radius: 4, maxRadius: 32, life: 420, maxLife: 420 }
-      );
-    };
-
     const onMove = (e: MouseEvent) => {
+      const now = performance.now();
+      const prev = prevMouseRef.current;
+      const dt = now - prev.t;
+
+      if (dt > 0 && dt < 120) {
+        const vx = (e.clientX - prev.x) / dt;
+        const vy = (e.clientY - prev.y) / dt;
+        velocityRef.current = Math.hypot(vx, vy);
+
+        if (!reducedRef.current && velocityRef.current > WARP_VELOCITY_THRESHOLD) {
+          spawnWarpParticles(
+            e.clientX,
+            e.clientY,
+            vx,
+            vy,
+            warpRef.current,
+            WARP_PARTICLE_CAP,
+            intensityRef.current
+          );
+        }
+      }
+
+      prevMouseRef.current = { x: e.clientX, y: e.clientY, t: now };
       mouseRef.current = { x: e.clientX, y: e.clientY, active: true };
-      lastMoveRef.current = performance.now();
+      lastMoveRef.current = now;
+
+      trailRef.current.push({ x: e.clientX, y: e.clientY, t: now });
+      if (trailRef.current.length > TRAIL_MAX) trailRef.current.shift();
 
       if (!hasPositionedRef.current) {
         posRef.current = { x: e.clientX, y: e.clientY };
@@ -287,21 +191,31 @@ export function InkCursor() {
 
       if (moveLogCountRef.current < 3) {
         moveLogCountRef.current += 1;
-        cursorLog("Mouse position update", { x: e.clientX, y: e.clientY, n: moveLogCountRef.current });
+        cursorLog("Mouse position update", { x: e.clientX, y: e.clientY });
       }
 
-      const resolved = resolveScene(
-        document.elementFromPoint(e.clientX, e.clientY),
-        window.location.pathname
-      );
+      const pathname = window.location.pathname;
+      intensityRef.current = pageIntensity(pathname);
+
+      const resolved = resolveNavigatorHover(document.elementFromPoint(e.clientX, e.clientY), pathname);
       hoverRef.current = resolved;
       setScene(resolved.scene);
-      setLabel(resolved.label);
+      setAssistantLabel(resolved.assistantLabel);
+      setScanInsight(resolved.scanInsight);
     };
 
     const onDown = (e: MouseEvent) => {
       setClicking(true);
-      if (!reducedRef.current) spawnBurst(e.clientX, e.clientY);
+      if (!reducedRef.current) {
+        spawnClickBurst(
+          e.clientX,
+          e.clientY,
+          burstsRef.current,
+          ringsRef.current,
+          BURST_CAP,
+          intensityRef.current
+        );
+      }
     };
 
     const onUp = () => setClicking(false);
@@ -311,26 +225,26 @@ export function InkCursor() {
     window.addEventListener("mouseup", onUp, { passive: true });
 
     const frame = (now: number) => {
-      timeRef.current = now;
       const mouse = mouseRef.current;
       const pos = posRef.current;
       const hover = hoverRef.current;
       const lerpFactor = reducedRef.current ? LERP_FAST : LERP;
+      const intensity = intensityRef.current;
 
       let targetX = mouse.x;
       let targetY = mouse.y;
 
-      if (hover.magneticRect && hover.scene === "card") {
+      if (hover.magneticRect) {
         const r = hover.magneticRect;
-        targetX = lerp(targetX, r.left + r.width / 2, MAGNET);
-        targetY = lerp(targetY, r.top + r.height / 2, MAGNET);
+        const magnet = MAGNET * (0.5 + intensity * 0.5);
+        targetX = lerp(targetX, r.left + r.width / 2, magnet);
+        targetY = lerp(targetY, r.top + r.height / 2, magnet);
       }
 
       const idleMs = now - lastMoveRef.current;
-      const isIdle = idleMs > 1200;
-      if (isIdle && !reducedRef.current && mouse.active) {
-        targetY += Math.sin(now * 0.002) * 5;
-        targetX += Math.cos(now * 0.0015) * 3;
+      if (idleMs > 1400 && !reducedRef.current && mouse.active && intensity > 0.5) {
+        targetY += Math.sin(now * 0.002) * 4;
+        targetX += Math.cos(now * 0.0015) * 2.5;
       }
 
       pos.x = lerp(pos.x, targetX, lerpFactor);
@@ -340,114 +254,48 @@ export function InkCursor() {
         root.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`;
       }
 
+      const warpActive = velocityRef.current > WARP_VELOCITY_THRESHOLD;
+      if (warpClassRef.current !== warpActive) {
+        warpClassRef.current = warpActive;
+        root.classList.toggle("navigator-warp", warpActive);
+      }
+
       if (!reducedRef.current) {
         const w = canvas.width / dprRef.current;
         const h = canvas.height / dprRef.current;
-        ctx.clearRect(0, 0, w, h);
-
-        const cx = pos.x;
-        const cy = pos.y;
-        const currentScene = hover.scene;
-        const orbiters = orbitersRef.current;
-        const t = now * 0.001;
-
-        const orbitPoints: { x: number; y: number }[] = [];
-
-        for (const o of orbiters) {
-          o.angle += o.speed * (currentScene === "marketing" ? 1.4 : 1);
-          const r = o.radius * (currentScene === "generate" ? 1.35 : 1);
-          const ox = cx + Math.cos(o.angle + t * 0.3) * r;
-          const oy = cy + Math.sin(o.angle + t * 0.3) * r;
-          orbitPoints.push({ x: ox, y: oy });
-
-          if (currentScene === "analytics") {
-            const barH = 6 + Math.abs(Math.sin(o.angle * 2 + t * 2)) * 14;
-            const grad = ctx.createLinearGradient(ox, oy - barH, ox, oy);
-            grad.addColorStop(0, "rgba(6, 182, 212, 0.9)");
-            grad.addColorStop(1, "rgba(124, 58, 237, 0.2)");
-            ctx.fillStyle = grad;
-            ctx.fillRect(ox - 1.5, oy - barH, 3, barH);
-          } else {
-            const grad = ctx.createRadialGradient(ox, oy, 0, ox, oy, o.size * 2.5);
-            grad.addColorStop(0, "rgba(196, 181, 253, 0.95)");
-            grad.addColorStop(0.5, "rgba(59, 130, 246, 0.55)");
-            grad.addColorStop(1, "rgba(6, 182, 212, 0)");
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.arc(ox, oy, o.size, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-
-        if (currentScene === "marketing" && orbitPoints.length > 1) {
-          ctx.strokeStyle = "rgba(124, 58, 237, 0.35)";
-          ctx.lineWidth = 0.8;
-          for (let i = 0; i < orbitPoints.length; i++) {
-            const a = orbitPoints[i];
-            const b = orbitPoints[(i + 2) % orbitPoints.length];
-            const c = orbitPoints[(i + 4) % orbitPoints.length];
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.lineTo(b.x, b.y);
-            ctx.lineTo(c.x, c.y);
-            ctx.stroke();
-          }
-          ctx.strokeStyle = "rgba(6, 182, 212, 0.25)";
-          for (let i = 0; i < orbitPoints.length; i++) {
-            const a = orbitPoints[i];
-            const b = orbitPoints[(i + 3) % orbitPoints.length];
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.lineTo(b.x, b.y);
-            ctx.stroke();
-          }
-        }
-
-        const dt = 16;
-        burstsRef.current = burstsRef.current.filter((p) => {
-          p.life -= dt;
-          if (p.life <= 0) return false;
-          p.x += p.vx;
-          p.y += p.vy;
-          p.vx *= 0.96;
-          p.vy *= 0.96;
-          const alpha = (p.life / p.maxLife) * 0.85;
-          ctx.fillStyle = `rgba(167, 139, 250, ${alpha})`;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-          ctx.fill();
-          return true;
+        scanPhaseRef.current = drawNavigatorFrame({
+          ctx,
+          width: w,
+          height: h,
+          now,
+          cx: pos.x,
+          cy: pos.y,
+          hover,
+          intensity,
+          orbiters: orbitersRef.current,
+          bursts: burstsRef.current,
+          rings: ringsRef.current,
+          trail: trailRef.current,
+          warpParticles: warpRef.current,
+          scanPhase: scanPhaseRef.current,
+          velocity: velocityRef.current,
         });
-
-        ringsRef.current = ringsRef.current.filter((ring) => {
-          ring.life -= dt;
-          if (ring.life <= 0) return false;
-          const progress = 1 - ring.life / ring.maxLife;
-          ring.radius = lerp(6, ring.maxRadius, progress);
-          const alpha = (1 - progress) * 0.6;
-          ctx.strokeStyle = `rgba(59, 130, 246, ${alpha})`;
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(ring.x, ring.y, ring.radius, 0, Math.PI * 2);
-          ctx.stroke();
-          return true;
-        });
+      } else {
+        ctx.clearRect(0, 0, canvas.width / dprRef.current, canvas.height / dprRef.current);
       }
 
+      velocityRef.current *= 0.92;
       rafRef.current = requestAnimationFrame(frame);
     };
 
     rafRef.current = requestAnimationFrame(frame);
     setEngineReady(true);
-    cursorLog("Cursor rendered successfully", {
-      orbVisible: getComputedStyle(root.querySelector(".cosmos-orb") ?? root).opacity,
-    });
+    cursorLog("AI Navigator rendered successfully");
 
     const motionMq = window.matchMedia("(prefers-reduced-motion: reduce)");
     const onMotionChange = (e: MediaQueryListEvent) => {
       reducedRef.current = e.matches;
       document.documentElement.classList.toggle("cosmos-cursor-reduced", e.matches);
-      cursorLog("prefers-reduced-motion changed", { reduced: e.matches });
     };
     motionMq.addEventListener("change", onMotionChange);
 
@@ -460,7 +308,7 @@ export function InkCursor() {
       window.removeEventListener("mousedown", onDown);
       window.removeEventListener("mouseup", onUp);
       motionMq.removeEventListener("change", onMotionChange);
-      cursorLog("Cursor engine cleaned up");
+      cursorLog("AI Navigator cleaned up");
     };
   }, [mode, reducedMotion]);
 
@@ -468,28 +316,34 @@ export function InkCursor() {
     return null;
   }
 
-  const scale = orbScale(scene, clicking);
-  const showLabel = scene === "generate" && label.length > 0;
+  const pathname =
+    typeof window !== "undefined" ? window.location.pathname : "/";
+  const isDashboard = isDashboardPath(pathname);
+  const warpActive = false;
+  const scale = orbScale(scene, clicking, warpActive);
+  const showAssistant = assistantLabel.length > 0;
+  const showScan = scanInsight.length > 0 && (scene === "scan" || scene === "analytics");
   const showAiIcon = scene === "employee";
-  const glowStrong = scene === "generate" || scene === "employee";
+  const glowStrong = showAssistant || scene === "employee" || scene === "scan";
   const motionReduced = Boolean(reducedMotion);
 
   const layer = (
     <div
-      className="cosmos-cursor-layer"
+      className="cosmos-cursor-layer navigator-cursor-layer"
       aria-hidden="true"
       data-cursor-mode={engineReady ? "active" : mode}
       data-cursor-scene={scene}
+      data-cursor-zone={isDashboard ? "dashboard" : "landing"}
     >
-      <canvas ref={canvasRef} className="cosmos-cursor-canvas" />
-      <div ref={rootRef} className="cosmos-cursor-root">
-        <div className="cosmos-cursor-body">
+      <canvas ref={canvasRef} className="cosmos-cursor-canvas navigator-canvas" />
+      <div ref={rootRef} className="cosmos-cursor-root navigator-root">
+        <div className="cosmos-cursor-body navigator-body">
           <motion.div
-            className="cosmos-orb-halo"
-            initial={{ opacity: 0.85, scale: 1 }}
+            className="cosmos-orb-halo navigator-orb-halo"
+            initial={{ opacity: 0.88, scale: 1 }}
             animate={{
-              opacity: glowStrong ? 1 : 0.85,
-              scale: motionReduced ? 1 : glowStrong ? 1.35 : isIdlePulse(scene) ? [1, 1.08, 1] : 1,
+              opacity: glowStrong ? 1 : 0.88,
+              scale: motionReduced ? 1 : glowStrong ? 1.38 : scene === "default" ? [1, 1.06, 1] : 1,
             }}
             transition={{
               duration: scene === "employee" ? 2.2 : 0.45,
@@ -498,42 +352,53 @@ export function InkCursor() {
             }}
           />
           <motion.div
-            className="cosmos-orb-ring"
+            className="cosmos-orb-ring navigator-orb-ring"
             initial={{ opacity: 0, scale: 0.7 }}
             animate={{
-              opacity: showLabel ? 1 : scene === "marketing" ? 0.5 : 0,
-              scale: showLabel ? 1 : 0.7,
+              opacity: showAssistant || showScan ? 1 : scene === "marketing" ? 0.45 : 0,
+              scale: showAssistant || showScan ? 1 : 0.72,
             }}
-            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
           />
           <motion.div
-            className="cosmos-orb"
+            className="cosmos-orb navigator-orb"
             initial={{ scale: 1, opacity: 1 }}
             animate={{
               scale: clicking ? scale * 0.92 : scale,
               opacity: 1,
               boxShadow: glowStrong
                 ? "0 0 28px rgba(124,58,237,0.95), 0 0 56px rgba(59,130,246,0.55), 0 0 80px rgba(6,182,212,0.3)"
-                : "0 0 16px rgba(124,58,237,0.7), 0 0 32px rgba(59,130,246,0.45), 0 0 48px rgba(6,182,212,0.2)",
+                : "0 0 18px rgba(124,58,237,0.75), 0 0 36px rgba(59,130,246,0.48), 0 0 52px rgba(6,182,212,0.22)",
             }}
             transition={{
-              scale: { duration: 0.35, ease: [0.22, 1, 0.36, 1] },
-              boxShadow: { duration: 0.4 },
+              scale: { duration: 0.32, ease: [0.22, 1, 0.36, 1] },
+              boxShadow: { duration: 0.38 },
             }}
           />
-          {showLabel && (
+          {showAssistant && (
             <motion.span
-              className="cosmos-label"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0 }}
+              className="navigator-assistant-label"
+              initial={{ opacity: 0, x: -6 }}
+              animate={{ opacity: 1, x: 0 }}
+              key={assistantLabel}
             >
-              {label}
+              {assistantLabel}
+            </motion.span>
+          )}
+          {showScan && (
+            <motion.span
+              className="navigator-scan-insight"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              key={scanInsight}
+            >
+              <span className="navigator-scan-dot" />
+              {scanInsight}
             </motion.span>
           )}
           {showAiIcon && (
             <motion.div
-              className="cosmos-ai-icon"
+              className="cosmos-ai-icon navigator-ai-icon"
               initial={{ opacity: 1, scale: 1 }}
               animate={
                 motionReduced
@@ -551,8 +416,4 @@ export function InkCursor() {
   );
 
   return createPortal(layer, document.body);
-}
-
-function isIdlePulse(scene: CosmosScene) {
-  return scene === "default" || scene === "marketing" || scene === "analytics";
 }
